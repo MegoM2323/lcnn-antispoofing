@@ -6,7 +6,7 @@ defaults:
   - transforms: stft
   - _self_
 # must match the length the model was trained with (see lcnn.yaml)
-collate_max_len: 64600
+collate_max_len: 77870
 inferencer:
   device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
   device: auto # device name or "auto"
@@ -15,4 +15,4 @@ inferencer:
   save_path: "eval" # predictions are saved to data/saved/${inferencer.save_path}
   seed: 1
   cudnn_benchmark: False # see trainer.cudnn_benchmark in lcnn.yaml
-  from_pretrained: "saved/lcnn_stft/model_best.pth" # path to the pretrained model
+  from_pretrained: "saved/lcnn_stft_seed1/model_best.pth" # path to the pretrained model

@@ -8,7 +8,7 @@ defaults:
   - _self_
 # number of samples in every waveform of a batch, ~4.04 s at 16 kHz.
 # The datasets cut the utterances to the same length while loading them.
-collate_max_len: 64600
+collate_max_len: 77870
 optimizer:
   _target_: torch.optim.Adam
   lr: 3e-4
