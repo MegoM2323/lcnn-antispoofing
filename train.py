@@ -22,9 +22,7 @@ def main(config):
     Args:
         config (DictConfig): hydra experiment config.
     """
-    set_random_seed(
-        config.trainer.seed, config.trainer.get("cudnn_benchmark", False)
-    )
+    set_random_seed(config.trainer.seed, config.trainer.get("cudnn_benchmark", False))
 
     project_config = OmegaConf.to_container(config)
     logger = setup_saving_and_logging(config)

@@ -1,13 +1,8 @@
 """
-Requirements covered:
-
-* the EER is 0 % for a perfectly separating countermeasure, 100 % for a
-  perfectly inverted one and 50 % when a class is missing (the grading script
-  must never receive a NaN);
-* the score convention matches the official grader: a higher score means
-  "more likely bonafide", bonafide is label 1;
-* the EER is computed over the whole partition, not averaged over batches;
-* the metric is stateful and must be resettable between epochs.
+The EER must follow the official grader: a higher score means "more likely
+bonafide" (label 1), the value is computed over the whole partition instead of
+being averaged over batches, and a missing class gives 50% rather than a NaN.
+The metric is stateful, hence it must be resettable between epochs.
 """
 
 import numpy as np
@@ -15,8 +10,11 @@ import pytest
 import torch
 
 from src.metrics.eer import EERMetric
-from src.metrics.eer_utils import DEGENERATE_EER, compute_eer_percent
-from src.trainer.trainer import Trainer
+from src.metrics.eer_utils import (
+    DEGENERATE_EER,
+    compute_eer_percent,
+    logits_to_scores,
+)
 
 
 def test_perfect_separation_gives_zero():
@@ -47,7 +45,7 @@ def test_single_class_is_not_nan():
 
 def test_one_error_out_of_ten():
     # 10 bonafide and 10 spoof trials, exactly one bonafide falls below the
-    # whole spoof distribution: 10 % of the target trials are rejected
+    # whole spoof distribution: 10% of the target trials are rejected
     scores = list(np.arange(10, 20, dtype=float)) + list(np.arange(0, 10, dtype=float))
     scores[9] = -1.0
     labels = [1] * 10 + [0] * 10
@@ -116,13 +114,13 @@ def test_higher_score_means_bonafide():
     # class 1 is bonafide, so the score must grow with the bonafide logit
     logits = torch.tensor([[0.0, 5.0], [5.0, 0.0]])
 
-    scores = Trainer.logits_to_scores(logits)
+    scores = logits_to_scores(logits)
 
     assert scores[0] > scores[1]
     assert scores.tolist() == [5.0, -5.0]
 
 
 def test_ready_made_scores_pass_through():
-    scores = Trainer.logits_to_scores(torch.tensor([0.3, -0.7]))
+    scores = logits_to_scores(torch.tensor([0.3, -0.7]))
 
     assert scores.tolist() == pytest.approx([0.3, -0.7])

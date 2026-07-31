@@ -1,7 +1,9 @@
+import hashlib
+import json
 import logging
 import random
+from collections.abc import Mapping
 from pathlib import Path
-from typing import List, Optional
 
 import soundfile as sf
 import torch
@@ -29,6 +31,9 @@ PROTOCOL_DIR = "ASVspoof2019_LA_cm_protocols"
 
 LABELS = {"bonafide": 1, "spoof": 0}
 
+# bumped whenever the layout of the cached index changes
+INDEX_FORMAT_VERSION = 1
+
 
 class ASVspoofDataset(BaseDataset):
     """
@@ -45,9 +50,9 @@ class ASVspoofDataset(BaseDataset):
         self,
         part: str,
         data_dir: str,
-        max_len: Optional[int] = 64600,
-        random_crop: Optional[bool] = None,
-        index_dir: Optional[str] = None,
+        max_len: int | None = 64600,
+        random_crop: bool | None = None,
+        index_dir: str | None = None,
         *args,
         **kwargs,
     ):
@@ -77,19 +82,93 @@ class ASVspoofDataset(BaseDataset):
         self.max_len = max_len
         self.random_crop = (part == "train") if random_crop is None else random_crop
 
+        self.protocol_path = self.data_dir / PROTOCOL_DIR / PROTOCOL_FILES[part]
+        self.audio_dir = self.data_dir / AUDIO_DIRS[part] / "flac"
+
         index_dir_path = (
             ROOT_PATH / "data" / "index" if index_dir is None else Path(index_dir)
         )
         index_path = index_dir_path / f"asvspoof_la_{part}.json"
 
-        if index_path.exists():
-            index = read_json(str(index_path))
-        else:
+        index = self._load_cached_index(index_path)
+        if index is None:
             index = self._create_index(index_path)
 
         super().__init__(index, *args, **kwargs)
 
-    def _create_index(self, index_path: Path) -> List[dict]:
+    def _fingerprint(self) -> dict | None:
+        """
+        Identity of the data the index is built from.
+
+        The index stores absolute paths and labels, so it is only valid for
+        one corpus location and one revision of the protocol: without this
+        check a changed ASVSPOOF_DIR or an updated protocol would be served
+        from a stale cache.
+
+        Returns:
+            fingerprint (dict | None): format version, resolved data_dir,
+                protocol name and the md5 of its content. None if the protocol
+                cannot be read.
+        """
+        try:
+            protocol_md5 = hashlib.md5(self.protocol_path.read_bytes()).hexdigest()
+        except OSError:
+            return None
+
+        return {
+            "version": INDEX_FORMAT_VERSION,
+            "data_dir": str(self.data_dir.absolute().resolve()),
+            "protocol": PROTOCOL_FILES[self.part],
+            "protocol_md5": protocol_md5,
+        }
+
+    def _load_cached_index(self, index_path: Path) -> list[dict] | None:
+        """
+        Read the cached index if it was built from the very same data.
+
+        Args:
+            index_path (Path): path of the cached index.
+        Returns:
+            index (list[dict] | None): cached index, None if it is absent,
+                unreadable or stale, in which case it has to be rebuilt.
+        """
+        if not index_path.exists():
+            return None
+
+        try:
+            cached = read_json(str(index_path))
+        except (OSError, json.JSONDecodeError) as exception:
+            logger.warning(
+                f"Cannot read the cached index {index_path} ({exception}), "
+                "rebuilding it"
+            )
+            return None
+
+        if not isinstance(cached, Mapping) or "index" not in cached:
+            logger.info(
+                f"The cached index {index_path} carries no provenance data "
+                "and cannot be verified, rebuilding it"
+            )
+            return None
+
+        fingerprint = self._fingerprint()
+        if fingerprint is None:
+            logger.warning(
+                f"Protocol {self.protocol_path} is not readable: the cached "
+                f"index {index_path} is used without verification"
+            )
+            return cached["index"]
+
+        if cached.get("fingerprint") != fingerprint:
+            logger.info(
+                f"The cached index {index_path} was built for another data_dir "
+                "or another revision of the protocol, rebuilding it"
+            )
+            return None
+
+        return cached["index"]
+
+    def _create_index(self, index_path: Path) -> list[dict]:
         """
         Parse the CM protocol of the partition and build the dataset index.
 
@@ -99,18 +178,19 @@ class ASVspoofDataset(BaseDataset):
             index (list[dict]): list, containing dict for each element of
                 the dataset with path, label and utterance metadata.
         """
-        protocol_path = self.data_dir / PROTOCOL_DIR / PROTOCOL_FILES[self.part]
-        audio_dir = self.data_dir / AUDIO_DIRS[self.part] / "flac"
+        protocol_path = self.protocol_path
+        audio_dir = self.audio_dir
 
         if not protocol_path.exists():
             raise FileNotFoundError(f"Protocol file is not found: {protocol_path}")
         if not audio_dir.is_dir():
             raise FileNotFoundError(f"Audio directory is not found: {audio_dir}")
 
-        logger.info("Creating ASVspoof2019 LA index for '%s' partition", self.part)
+        logger.info(f"Creating ASVspoof2019 LA index for '{self.part}' partition")
 
-        index: List[dict] = []
-        missing = 0
+        index: list[dict] = []
+        missing: list[str] = []
+        total = 0
         with protocol_path.open("rt") as protocol_file:
             for line_number, line in enumerate(protocol_file, start=1):
                 fields = line.split()
@@ -129,9 +209,21 @@ class ASVspoofDataset(BaseDataset):
                         f"in {protocol_path}"
                     )
 
+                total += 1
                 audio_path = audio_dir / f"{utt_id}.flac"
                 if not audio_path.exists():
-                    missing += 1
+                    if self.part == "eval":
+                        # the grading script indexes the submission by every
+                        # utterance id of the protocol, so a single missing
+                        # file means a KeyError and a rejected submission
+                        raise FileNotFoundError(
+                            f"Audio file {audio_path} is missing, but it is "
+                            f"listed at line {line_number} of {protocol_path}. "
+                            "The eval index has to cover the whole protocol: "
+                            "an incomplete submission is not gradeable. Check "
+                            "that the corpus is fully unpacked."
+                        )
+                    missing.append(utt_id)
                     continue
 
                 index.append(
@@ -144,11 +236,12 @@ class ASVspoofDataset(BaseDataset):
                     }
                 )
 
-        if missing > 0:
+        if missing:
+            examples = ", ".join(missing[:5])
             logger.warning(
-                "Skipped %d utterances of '%s' partition: audio files are missing",
-                missing,
-                self.part,
+                f"Skipped {len(missing)} of {total} utterances of the "
+                f"'{self.part}' partition: audio files are missing "
+                f"(e.g. {examples})"
             )
         if len(index) == 0:
             raise RuntimeError(
@@ -157,7 +250,9 @@ class ASVspoofDataset(BaseDataset):
             )
 
         index_path.parent.mkdir(exist_ok=True, parents=True)
-        write_json(index, str(index_path))
+        write_json(
+            {"fingerprint": self._fingerprint(), "index": index}, str(index_path)
+        )
 
         return index
 
@@ -204,7 +299,7 @@ class ASVspoofDataset(BaseDataset):
                 frames = -1 if self.max_len is None else self.max_len
                 audio = audio_file.read(frames=frames, dtype="float32", always_2d=True)
         except (sf.LibsndfileError, RuntimeError, OSError) as exception:
-            logger.error("Failed to read audio file %s: %s", path, exception)
+            logger.error(f"Failed to read audio file {path}: {exception}")
             raise RuntimeError(f"Cannot read audio file {path}") from exception
 
         data_object = torch.from_numpy(audio).T

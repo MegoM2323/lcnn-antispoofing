@@ -1,13 +1,10 @@
 """
-Requirements covered:
-
-* a checkpoint written by the training run must be loadable by the inference
-  run: this is the only path from a trained model to a submission, and it is
-  checked here on a checkpoint with exactly the same content as the one
-  '_save_checkpoint' writes (including the hydra config object);
-* a bare state dict (a checkpoint from an external source) is also accepted.
-
-The test builds the small LFCC-sized LCNN on CPU, so it takes a second.
+A checkpoint is the only path from a trained model to a submission, so the
+inference run must load back both what '_save_checkpoint' writes (the hydra
+config object included) and a bare state dict from an external source. Loading
+weights that were trained with another input pipeline has to be reported: the
+shapes still match, so nothing else catches it. The small LFCC-sized LCNN is
+built on CPU, so the test takes a second.
 """
 
 import pytest
@@ -29,9 +26,11 @@ CONFIG = OmegaConf.create(
 class _Loader(BaseTrainer):
     """Minimal holder that exposes only the checkpoint loading logic."""
 
-    def __init__(self, model):
+    def __init__(self, model, config=None):
         self.model = model
         self.device = "cpu"
+        if config is not None:
+            self.config = config
 
 
 def make_model():
@@ -99,3 +98,41 @@ def test_missing_checkpoint_is_reported(tmp_path):
 
     with pytest.raises((FileNotFoundError, OSError)):
         loader._from_pretrained(tmp_path / "does_not_exist.pth")
+
+
+def save_checkpoint(tmp_path, config):
+    path = tmp_path / "model_best.pth"
+    torch.save({"state_dict": make_model().state_dict(), "config": config}, path)
+    return path
+
+
+def test_foreign_input_pipeline_is_reported(tmp_path, capsys):
+    path = save_checkpoint(
+        tmp_path, OmegaConf.merge(CONFIG, {"collate_max_len": 64600})
+    )
+    current = OmegaConf.merge(CONFIG, {"collate_max_len": 77870})
+
+    _Loader(make_model(), current)._from_pretrained(path)
+
+    report = capsys.readouterr().out
+    assert "CONFIG MISMATCH" in report
+    assert "collate_max_len" in report
+    assert "64600" in report and "77870" in report
+
+
+def test_matching_config_does_not_warn(tmp_path, capsys):
+    config = OmegaConf.merge(CONFIG, {"collate_max_len": 77870})
+    path = save_checkpoint(tmp_path, config)
+
+    _Loader(make_model(), config)._from_pretrained(path)
+
+    assert "CONFIG MISMATCH" not in capsys.readouterr().out
+
+
+def test_checkpoint_without_a_config_is_reported(tmp_path, capsys):
+    path = tmp_path / "weights.pth"
+    torch.save({"state_dict": make_model().state_dict()}, path)
+
+    _Loader(make_model(), CONFIG)._from_pretrained(path)
+
+    assert "stores no config" in capsys.readouterr().out

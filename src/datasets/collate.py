@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List
 
 import torch
 
@@ -32,7 +32,7 @@ def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
     return audio[:max_len]
 
 
-def collate_fn(dataset_items: List[dict], max_len: int = DEFAULT_MAX_LEN) -> dict:
+def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dict:
     """
     Collate fields in the dataset items and bring the waveforms to the
     same length. Converts individual items into a batch.
@@ -67,7 +67,7 @@ def collate_fn(dataset_items: List[dict], max_len: int = DEFAULT_MAX_LEN) -> dic
     return result_batch
 
 
-def get_collate_fn(max_len: int = DEFAULT_MAX_LEN) -> Callable[[List[dict]], dict]:
+def get_collate_fn(max_len: int = DEFAULT_MAX_LEN) -> Callable[[list[dict]], dict]:
     """
     Create a collate_fn with the given waveform length.
 

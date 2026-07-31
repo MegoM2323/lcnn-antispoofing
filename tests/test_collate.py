@@ -1,13 +1,9 @@
 """
-Requirements covered:
-
-* every batch has a fixed waveform length, whatever the length of the
-  individual utterances;
-* utterances shorter than the window are repeated cyclically, not zero-padded:
-  trailing silence is a shortcut the countermeasure must not learn;
-* labels and utterance ids survive collation in the original order;
-* degenerate input (empty batch, empty waveform, non-positive length) is
-  rejected instead of producing a silently broken batch.
+Every batch must have a fixed waveform length whatever the utterances are, and
+short ones are repeated cyclically instead of being zero-padded: trailing
+silence is a shortcut the countermeasure must not learn. Labels and utterance
+ids survive collation in the original order, degenerate input is rejected
+instead of producing a silently broken batch.
 """
 
 import pytest

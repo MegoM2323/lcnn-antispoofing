@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 from torch import nn
 
@@ -12,7 +10,7 @@ def init_weights(module: nn.Module) -> None:
     (arXiv:1904.05576, Sec. 2.3). Biases are set to zero.
 
     Args:
-        module (nn.Module): module to initialize (used with ``apply``).
+        module (nn.Module): module to initialize (used with apply).
     """
     if isinstance(module, (nn.Conv2d, nn.Linear)):
         nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
@@ -29,8 +27,6 @@ class LCNNBackbone(nn.Module):
     network is fully convolutional, so the output resolution depends on the
     input one only through the four 2x2 max-pooling layers.
     """
-
-    out_channels = 32
 
     def __init__(self, in_channels: int = 1):
         """
@@ -87,7 +83,7 @@ class LCNNBase(nn.Module):
     It owns the convolutional backbone and the classification head
     (FC_29 -> MFM_30 -> Dropout -> BatchNorm_31 -> FC_32 of Table 1).
     Subclasses only define how the backbone feature map is pooled into
-    a single vector via ``build_pooling`` and ``pool_features``.
+    a single vector via build_pooling and pool_features.
     """
 
     def __init__(
@@ -113,8 +109,6 @@ class LCNNBase(nn.Module):
         """
         super().__init__()
 
-        self.in_freq = in_freq
-        self.in_frames = in_frames
         self.return_embedding = return_embedding
 
         self.backbone = LCNNBackbone()
@@ -128,11 +122,9 @@ class LCNNBase(nn.Module):
         self.bn = nn.BatchNorm1d(embedding_dim // 2)
         self.classifier = nn.Linear(embedding_dim // 2, n_class)
 
-        self.embedding_size = embedding_dim // 2
-
         self.apply(init_weights)
 
-    def _conv_output_shape(self, in_freq: int, in_frames: int) -> Tuple[int, int, int]:
+    def _conv_output_shape(self, in_freq: int, in_frames: int) -> tuple[int, int, int]:
         """
         Compute the backbone output shape by running a dummy tensor through it.
 
@@ -256,12 +248,7 @@ class LCNN(LCNNBase):
 
     def build_pooling(self, channels: int, freq: int, frames: int) -> int:
         """
-        Args:
-            channels (int): number of backbone output channels.
-            freq (int): backbone output frequency resolution.
-            frames (int): backbone output time resolution.
-        Returns:
-            pooled_dim (int): number of features fed into FC_29.
+        Flatten the whole feature map, as in Table 1 of the paper.
         """
         return channels * freq * frames
 

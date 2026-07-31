@@ -1,13 +1,11 @@
 import csv
-from contextlib import nullcontext
 
 import torch
 from tqdm.auto import tqdm
 
-from src.metrics.eer_utils import compute_eer_percent
+from src.metrics.eer_utils import epoch_eer, logits_to_scores
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
-from src.trainer.trainer import Trainer
 
 
 class Inferencer(BaseTrainer):
@@ -88,14 +86,7 @@ class Inferencer(BaseTrainer):
         else:
             self.evaluation_metrics = None
 
-        self.use_amp = bool(self.cfg_trainer.get("use_amp", False))
-        self.amp_dtype = getattr(
-            torch, str(self.cfg_trainer.get("amp_dtype", "bfloat16"))
-        )
-        self.amp_device_type = torch.device(self.device).type
-        if self.use_amp and self.amp_device_type != "cuda":
-            print(f"AMP is requested but the device is '{self.device}', disabling it.")
-            self.use_amp = False
+        self._setup_amp()
 
         # buffers with the predictions of the current partition
         self._utt_ids = []
@@ -175,7 +166,7 @@ class Inferencer(BaseTrainer):
 
         logits = batch["logits"].detach().float().cpu()
         self._logits.append(logits)
-        self._scores.append(Trainer.logits_to_scores(logits))
+        self._scores.append(logits_to_scores(logits))
         if batch.get("utt_id") is not None:
             self._utt_ids.extend(batch["utt_id"])
         if batch.get("labels") is not None:
@@ -301,24 +292,4 @@ class Inferencer(BaseTrainer):
             eer (float | None): equal error rate in percents (0-100), or None
                 if the labels are missing or one of the classes is absent.
         """
-        if labels is None or scores.numel() == 0:
-            return None
-
-        bonafide_count = int((labels == 1).sum())
-        if bonafide_count == 0 or bonafide_count == labels.numel():
-            print("Cannot compute the EER: one of the classes is missing.")
-            return None
-
-        return compute_eer_percent(scores.numpy(), labels.numpy())
-
-    def _autocast(self):
-        """
-        Context manager for the forward pass.
-
-        Returns:
-            context (AbstractContextManager): autocast context if AMP is
-                enabled, a no-op context otherwise.
-        """
-        if not self.use_amp:
-            return nullcontext()
-        return torch.autocast(device_type=self.amp_device_type, dtype=self.amp_dtype)
+        return epoch_eer(scores, labels, warn=print)

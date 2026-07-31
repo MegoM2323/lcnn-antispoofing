@@ -1,9 +1,7 @@
-from contextlib import nullcontext
-
 import torch
 from tqdm.auto import tqdm
 
-from src.metrics.eer_utils import compute_eer_percent
+from src.metrics.eer_utils import epoch_eer, logits_to_scores
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
 
@@ -16,10 +14,7 @@ class Trainer(BaseTrainer):
 
     Adds two things on top of the base trainer:
 
-    1. Mixed precision (bf16 autocast). The LCNN input is a 863x600 spectrogram,
-       so activations dominate the memory footprint; bf16 halves it and speeds
-       the forward pass up. bf16 has the same exponent range as fp32, hence no
-       GradScaler is required.
+    1. Mixed precision around the forward pass, see BaseTrainer._setup_amp.
     2. Correct epoch-level EER. EER is a property of the whole score
        distribution and is not decomposable over batches: the average of
        per-batch EERs is not the EER of the partition. Scores of the whole
@@ -35,35 +30,11 @@ class Trainer(BaseTrainer):
         """
         super().__init__(*args, **kwargs)
 
-        self.use_amp = bool(self.cfg_trainer.get("use_amp", False))
-        self.amp_dtype = getattr(
-            torch, str(self.cfg_trainer.get("amp_dtype", "bfloat16"))
-        )
-        self.amp_device_type = torch.device(self.device).type
-        if self.use_amp and self.amp_device_type != "cuda":
-            self.logger.warning(
-                f"AMP is requested but the device is '{self.device}'. "
-                "Autocast is disabled."
-            )
-            self.use_amp = False
-        if self.use_amp:
-            self.logger.info(f"Training with autocast, dtype={self.amp_dtype}.")
+        self._setup_amp()
 
         # buffers for the epoch-level EER (filled during evaluation only)
         self._epoch_scores = []
         self._epoch_labels = []
-
-    def _autocast(self):
-        """
-        Context manager for the forward pass.
-
-        Returns:
-            context (AbstractContextManager): autocast context if AMP is
-                enabled, a no-op context otherwise.
-        """
-        if not self.use_amp:
-            return nullcontext()
-        return torch.autocast(device_type=self.amp_device_type, dtype=self.amp_dtype)
 
     def process_batch(self, batch, metrics: MetricTracker):
         """
@@ -232,7 +203,7 @@ class Trainer(BaseTrainer):
         labels = batch.get("labels")
         if logits is None or labels is None:
             return
-        self._epoch_scores.append(self.logits_to_scores(logits).cpu())
+        self._epoch_scores.append(logits_to_scores(logits).cpu())
         self._epoch_labels.append(labels.detach().reshape(-1).cpu())
 
     def _collected_scores(self):
@@ -258,18 +229,7 @@ class Trainer(BaseTrainer):
                 if the scores are missing or one of the classes is absent.
         """
         scores, labels = self._collected_scores()
-        if scores is None:
-            return None
-
-        bonafide_count = int((labels == 1).sum())
-        if bonafide_count == 0 or bonafide_count == labels.numel():
-            self.logger.warning(
-                "Cannot compute the EER: one of the classes is missing "
-                "in the partition."
-            )
-            return None
-
-        return compute_eer_percent(scores.numpy(), labels.numpy())
+        return epoch_eer(scores, labels, warn=self.logger.warning)
 
     def _reset_metric_state(self, part):
         """
@@ -283,24 +243,3 @@ class Trainer(BaseTrainer):
             reset = getattr(met, "reset", None)
             if callable(reset):
                 reset()
-
-    @staticmethod
-    def logits_to_scores(logits):
-        """
-        Reduce model outputs to a 1D detection score, using the same convention
-        as the official grading script: a higher score means "more likely
-        bonafide" (label 1).
-
-        Args:
-            logits (Tensor): model output of shape (B, n_classes) or (B,).
-        Returns:
-            scores (Tensor): 1D float32 tensor with detection scores.
-        """
-        logits = logits.detach().float()
-        if logits.ndim == 1:
-            return logits
-        if logits.ndim != 2 or logits.shape[-1] < 2:
-            raise ValueError(
-                f"Expected logits of shape (B, n_classes>=2), got {tuple(logits.shape)}"
-            )
-        return logits[:, 1] - logits[:, 0]

@@ -1,6 +1,6 @@
 eval:
   _target_: src.datasets.ASVspoofDataset
   part: "eval"
-  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA}
+  data_dir: ${oc.env:ASVSPOOF_DIR,${hydra:runtime.cwd}/data/LA}
   max_len: ${collate_max_len}
   instance_transforms: ${transforms.instance_transforms.inference}

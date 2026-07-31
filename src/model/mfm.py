@@ -8,12 +8,12 @@ class MFM(nn.Module):
 
     Splits the input into two equal halves along the channel (feature)
     dimension and takes the element-wise maximum of them:
-    ``y^k = max(x^k, x^{k + N})``, where ``N`` is the number of output
-    channels. See Eq. 1 of arXiv:1511.02683.
+    y^k = max(x^k, x^{k + N}), where N is the number of output channels.
+    See Eq. 1 of arXiv:1511.02683.
 
     Two types are supported (as in the original paper):
-        * type 1 -- applied after a convolution, input is 4D (B, 2N, F, T);
-        * type 2 -- applied after a fully-connected layer, input is 2D (B, 2N).
+        * type 1: applied after a convolution, input is 4D (B, 2N, F, T);
+        * type 2: applied after a fully-connected layer, input is 2D (B, 2N).
     """
 
     def __init__(self, out_channels: int, mfm_type: int = 1):

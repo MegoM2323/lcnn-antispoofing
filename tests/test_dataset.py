@@ -3,15 +3,20 @@ Requirements covered:
 
 * the index of a partition is built from the official CM protocol, every
   utterance keeps its id and its binary label (bonafide = 1, spoof = 0);
-* utterances listed in the protocol but missing on disk are skipped, not fatal;
+* utterances listed in the protocol but missing on disk are skipped on
+  train/dev, and are fatal on eval: the grading script looks up every id of
+  the protocol in the submission, so an incomplete eval index means a rejected
+  submission;
 * a malformed protocol (wrong number of fields, unknown label) is rejected
   loudly instead of silently producing a wrong index;
-* the index is cached and re-read, and the cache never lands in the repository
-  by accident;
+* the index is cached and re-read, and the cache is rebuilt whenever the
+  corpus location or the protocol changes: the index stores absolute paths and
+  labels, so a stale cache silently feeds the wrong data;
 * an unknown partition name is rejected.
 """
 
 import json
+import shutil
 
 import pytest
 import torch
@@ -79,6 +84,14 @@ def test_missing_audio_is_skipped(la_root, index_dir):
     assert len(dataset) > 0
 
 
+def test_missing_eval_audio_is_fatal(la_root, index_dir):
+    removed = sorted((la_root / "ASVspoof2019_LA_eval" / "flac").glob("*.flac"))[0]
+    removed.unlink()
+
+    with pytest.raises(FileNotFoundError, match=removed.stem):
+        make_dataset(la_root, index_dir, part="eval")
+
+
 def test_malformed_protocol_line_is_rejected(la_root, index_dir):
     protocol = (
         la_root / "ASVspoof2019_LA_cm_protocols" / "ASVspoof2019.LA.cm.train.trn.txt"
@@ -123,13 +136,60 @@ def test_index_is_cached_and_reused(la_root, index_dir):
     cache = index_dir / "asvspoof_la_train.json"
 
     assert cache.exists()
-    assert len(json.loads(cache.read_text())) == len(first)
+    assert len(json.loads(cache.read_text())["index"]) == len(first)
 
     # the second dataset must not re-scan the protocol
     (
         la_root / "ASVspoof2019_LA_cm_protocols" / "ASVspoof2019.LA.cm.train.trn.txt"
     ).unlink()
     assert len(make_dataset(la_root, index_dir)) == len(first)
+
+
+def test_cache_is_rebuilt_when_the_protocol_changes(la_root, index_dir):
+    protocol = (
+        la_root / "ASVspoof2019_LA_cm_protocols" / "ASVspoof2019.LA.cm.train.trn.txt"
+    )
+    first = make_dataset(la_root, index_dir)
+
+    lines = protocol.read_text().splitlines(keepends=True)
+    protocol.write_text("".join(lines[:-2]))
+    second = make_dataset(la_root, index_dir)
+
+    assert len(second) == len(first) - 2
+
+
+def test_cache_is_rebuilt_when_the_labels_change(la_root, index_dir):
+    protocol = (
+        la_root / "ASVspoof2019_LA_cm_protocols" / "ASVspoof2019.LA.cm.train.trn.txt"
+    )
+    make_dataset(la_root, index_dir)
+
+    protocol.write_text(protocol.read_text().replace("bonafide", "spoof"))
+    labels = {entry["label"] for entry in make_dataset(la_root, index_dir)._index}
+
+    assert labels == {0}
+
+
+def test_cache_is_rebuilt_when_the_corpus_moves(la_root, index_dir, tmp_path):
+    make_dataset(la_root, index_dir)
+
+    moved_root = tmp_path / "LA_moved"
+    shutil.copytree(la_root, moved_root)
+    dataset = make_dataset(moved_root, index_dir)
+
+    assert all(entry["path"].startswith(str(moved_root)) for entry in dataset._index)
+
+
+def test_legacy_cache_without_provenance_is_rebuilt(la_root, index_dir):
+    cache = index_dir / "asvspoof_la_train.json"
+    dataset = make_dataset(la_root, index_dir)
+    # the format used before the cache carried the data it was built from
+    cache.write_text(json.dumps(json.loads(cache.read_text())["index"][:3]))
+
+    rebuilt = make_dataset(la_root, index_dir)
+
+    assert len(rebuilt) == len(dataset)
+    assert "fingerprint" in json.loads(cache.read_text())
 
 
 def test_limit_and_shuffle_are_deterministic(la_root, index_dir):

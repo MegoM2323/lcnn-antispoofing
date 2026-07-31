@@ -3,7 +3,7 @@ class MetricTracker:
     Class to aggregate metrics from many batches.
 
     The state is kept in plain dicts instead of a pandas DataFrame: since
-    pandas 3.0 copy-on-write makes ``DataFrame[col].values`` a read-only view,
+    pandas 3.0 copy-on-write makes DataFrame[col].values a read-only view,
     which broke the in-place reset of the original implementation. Dicts also
     keep the logged values as python floats instead of numpy scalars.
     """

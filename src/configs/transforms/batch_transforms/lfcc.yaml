@@ -16,11 +16,8 @@ train:
         n_frames: 750
         crop: random
         pad_mode: repeat
-      # augmentation is off by default, uncomment to enable
-      # - _target_: src.transforms.SpecAugment
-      #   freq_mask_param: 8
-      #   time_mask_param: 40
-      #   p: 0.5
+      # augmentation is off by default: add src.transforms.SpecAugment here to
+      # enable it, see src/transforms/augment.py for the parameters
 inference:
   data_object:
     _target_: torch.nn.Sequential

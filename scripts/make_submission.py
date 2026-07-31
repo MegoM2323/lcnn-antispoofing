@@ -19,13 +19,21 @@ import shutil
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).absolute().resolve().parent.parent))
+PROJECT_ROOT = Path(__file__).absolute().resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
 from src.metrics.eer_utils import compute_eer_percent  # noqa: E402
 
+# the protocol of the LA corpus, laid out as described in the README
 DEFAULT_PROTOCOL = os.environ.get(
     "ASVSPOOF_EVAL_PROTOCOL",
-    "/home/mego/data/Homework/Practice/repo/hw/ASVspoof2019.LA.cm.eval.trl.txt",
+    str(
+        PROJECT_ROOT
+        / "data"
+        / "LA"
+        / "ASVspoof2019_LA_cm_protocols"
+        / "ASVspoof2019.LA.cm.eval.trl.txt"
+    ),
 )
 DEFAULT_SUBMISSION_NAME = "mppanin.csv"  # must match the university login
 

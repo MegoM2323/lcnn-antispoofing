@@ -1,18 +1,18 @@
 """
 Margin-based losses for voice anti-spoofing (arXiv:2103.11326, Sec. 2.2).
 
-All of them share the generalised softmax formulation (Eq. 2)::
+All of them share the generalized softmax formulation (Eq. 2):
 
     P_{j,k} = exp(a * [cos(m1 * theta_{j,k} + m2) - m3])
               / (exp(a * [cos(m1 * theta_{j,k} + m2) - m3])
                  + sum_{i != k} exp(a * cos theta_{j,i}))
 
-where ``theta_{j,i}`` is the angle between the embedding of sample ``j`` and
-the class vector ``i``, ``k`` is the target class and ``a`` is the scale.
+where theta_{j,i} is the angle between the embedding of sample j and the class
+vector i, k is the target class and a is the scale.
 
 IMPORTANT (shared by every loss in this module): the returned dict contains a
 "logits" key with the cosine scores of the batch. The trainer performs
-``batch.update(outputs)`` (model) and only then ``batch.update(all_losses)``
+batch.update(outputs) (model) and only then batch.update(all_losses)
 (loss), so this key *overwrites* the logits produced by the model. This is
 intentional: with margin losses the class vectors live inside the loss module,
 so the cosine scores computed here are the only calibrated scores available,
@@ -28,7 +28,7 @@ from torch import nn
 
 def cosine_scores(embedding: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     """
-    Cosine similarity between L2-normalised embeddings and L2-normalised class
+    Cosine similarity between L2-normalized embeddings and L2-normalized class
     vectors.
 
     Args:
@@ -46,11 +46,11 @@ def cosine_scores(embedding: torch.Tensor, weight: torch.Tensor) -> torch.Tensor
 
 class AMSoftmaxLoss(nn.Module):
     """
-    Additive Margin Softmax: ``m1 = 1``, ``m2 = 0``, ``m3 = margin``.
+    Additive Margin Softmax: m1 = 1, m2 = 0, m3 = margin.
 
-    The target logit is penalised by a fixed additive margin in the cosine
+    The target logit is penalized by a fixed additive margin in the cosine
     domain, which forces an angular gap between bonafide and spoof clusters.
-    Defaults (``margin = 0.9``, ``scale = 20``) are the ones reported in
+    Defaults (margin = 0.9, scale = 20) are the ones reported in
     arXiv:2103.11326 for the ASVspoof2019 LA setup.
     """
 
@@ -87,7 +87,7 @@ class AMSoftmaxLoss(nn.Module):
             labels (Tensor): ground-truth labels of shape (B,).
         Returns:
             losses (dict): 'loss' and 'logits' (scaled cosine scores, computed
-                without the margin -- see the module docstring).
+                without the margin; see the module docstring).
         """
         cosine = cosine_scores(embedding, self.weight)
         target_mask = F.one_hot(labels, num_classes=cosine.shape[-1]).to(cosine.dtype)
@@ -100,18 +100,16 @@ class OCSoftmaxLoss(nn.Module):
     """
     One-Class Softmax (Zhang et al., 2021).
 
-    Instead of one vector per class, a single centre ``w0`` is learnt for the
+    Instead of one vector per class, a single center w0 is learned for the
     bonafide class, and two different margins are applied: bonafide embeddings
-    are pushed to have ``cos >= m_real``, spoofed ones to have
-    ``cos <= m_fake``. Since spoofing attacks are open-set, this compacts the
-    bonafide cluster without forcing all (unseen) attacks into a single
-    cluster::
+    are pushed to have cos >= m_real, spoofed ones to have cos <= m_fake.
+    Since spoofing attacks are open-set, this compacts the bonafide cluster
+    without forcing all (unseen) attacks into a single cluster:
 
         L = mean_j softplus(alpha * s_j * (m_{y_j} - cos theta_j)),
         s_j = +1 for bonafide (label 1), -1 for spoof (label 0)
 
-    Defaults follow arXiv:2103.11326: ``alpha = 20``, ``m_real = 0.9``,
-    ``m_fake = 0.2``.
+    Defaults follow arXiv:2103.11326: alpha = 20, m_real = 0.9, m_fake = 0.2.
     """
 
     def __init__(
@@ -154,9 +152,9 @@ class OCSoftmaxLoss(nn.Module):
             labels (Tensor): ground-truth labels of shape (B,), 1 = bonafide.
         Returns:
             losses (dict): 'loss' and 'logits' of shape (B, 2), built as
-                ``[-s, +s]`` with ``s = scale * (cos - decision_threshold)``,
-                so that ``logits[:, 1] - logits[:, 0]`` is monotone in the
-                cosine score (see the module docstring).
+                [-s, +s] with s = scale * (cos - decision_threshold), so that
+                logits[:, 1] - logits[:, 0] is monotone in the cosine score
+                (see the module docstring).
         """
         cosine = cosine_scores(embedding, self.center).squeeze(-1)
 
@@ -180,7 +178,7 @@ class OCSoftmaxLoss(nn.Module):
 class P2SGradLoss(nn.Module):
     """
     P2SGrad MSE loss (Wang et al., 2019): hyperparameter-free, no margin and no
-    scale::
+    scale:
 
         L = (1 / |D|) * sum_j sum_k (cos theta_{j,k} - 1(y_j = k))^2
 
@@ -212,7 +210,7 @@ class P2SGradLoss(nn.Module):
             labels (Tensor): ground-truth labels of shape (B,).
         Returns:
             losses (dict): 'loss' and 'logits' (raw cosine scores, no scaling
-                is needed since EER is invariant to monotone transforms -- see
+                is needed since EER is invariant to monotone transforms; see
                 the module docstring).
         """
         cosine = cosine_scores(embedding, self.weight)

@@ -9,7 +9,7 @@ ASVSPOOF19_LA_TRAIN_COUNTS: list[float] = [22800, 2580]
 def balanced_class_weights(class_counts: list[float]) -> list[float]:
     """
     Compute inverse-frequency class weights (the "balanced" scheme used by
-    sklearn)::
+    sklearn):
 
         w_c = N / (n_classes * count_c),    N = sum(count_c)
 
@@ -52,15 +52,15 @@ class CELoss(nn.Module):
         """
         Args:
             class_weights (list[float] | None): explicit per-class weights
-                ordered as [spoof, bonafide]. ``None`` (default) means an
+                ordered as [spoof, bonafide]. None (default) means an
                 unweighted cross-entropy.
             label_smoothing (float): label smoothing factor in [0, 1).
             auto_weight (bool): if True, the weights are derived from
-                ``class_counts`` via ``balanced_class_weights`` instead of
-                being taken from ``class_weights``. Mutually exclusive with
-                a non-None ``class_weights``.
+                class_counts via balanced_class_weights instead of being taken
+                from class_weights. Mutually exclusive with a non-None
+                class_weights.
             class_counts (list[float] | None): per-class sample counts used by
-                ``auto_weight``. Defaults to the ASVspoof2019 LA train counts
+                auto_weight. Defaults to the ASVspoof2019 LA train counts
                 [22800, 2580].
         """
         super().__init__()

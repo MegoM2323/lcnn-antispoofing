@@ -24,12 +24,8 @@ class LCNNAttention(LCNNBase):
 
     def build_pooling(self, channels: int, freq: int, frames: int) -> int:
         """
-        Args:
-            channels (int): number of backbone output channels.
-            freq (int): backbone output frequency resolution.
-            frames (int): backbone output time resolution.
-        Returns:
-            pooled_dim (int): number of features fed into FC_29.
+        Attention pooling over time: the head stops depending on the input
+        length.
         """
         self.attention = nn.Sequential(
             nn.Linear(channels, self.attention_dim),
@@ -78,12 +74,7 @@ class LCNNLSTMSum(LCNNBase):
 
     def build_pooling(self, channels: int, freq: int, frames: int) -> int:
         """
-        Args:
-            channels (int): number of backbone output channels.
-            freq (int): backbone output frequency resolution.
-            frames (int): backbone output time resolution.
-        Returns:
-            pooled_dim (int): number of features fed into FC_29.
+        Two residual Bi-LSTM layers, then an average over time.
         """
         recurrent_dim = 2 * self.hidden_size
 

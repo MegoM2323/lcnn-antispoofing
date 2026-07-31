@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 import torch
 import torchaudio
@@ -48,6 +47,20 @@ def fix_frames(
     return spec[..., start : start + n_frames]
 
 
+def validate_frame_modes(crop: str, pad_mode: str) -> None:
+    """
+    Check the way a front-end brings a sequence to the fixed length.
+
+    Args:
+        crop (str): one of CROP_MODES, see fix_frames.
+        pad_mode (str): one of PAD_MODES, see fix_frames.
+    """
+    if crop not in CROP_MODES:
+        raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
+    if pad_mode not in PAD_MODES:
+        raise ValueError(f"pad_mode must be one of {PAD_MODES}, got {pad_mode}")
+
+
 def as_batched_waveform(x: torch.Tensor) -> torch.Tensor:
     """
     Normalize the waveform layout to (B, T).
@@ -66,7 +79,7 @@ def as_batched_waveform(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-def autocast_dtype(device_type: str) -> Optional[torch.dtype]:
+def autocast_dtype(device_type: str) -> torch.dtype | None:
     """
     Get the dtype the surrounding autocast region expects, if any.
 
@@ -120,10 +133,7 @@ class LogSpectrogram(nn.Module):
         """
         super().__init__()
 
-        if crop not in CROP_MODES:
-            raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
-        if pad_mode not in PAD_MODES:
-            raise ValueError(f"pad_mode must be one of {PAD_MODES}, got {pad_mode}")
+        validate_frame_modes(crop, pad_mode)
         window_fns = {
             "blackman": torch.blackman_window,
             "hann": torch.hann_window,
@@ -136,7 +146,6 @@ class LogSpectrogram(nn.Module):
         self.n_frames = n_frames
         self.crop = crop
         self.pad_mode = pad_mode
-        self.n_freqs = n_fft // 2 + 1
 
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
@@ -193,7 +202,7 @@ class LFCC(nn.Module):
         hop_length: int = 160,
         n_fft: int = 512,
         f_min: float = 0.0,
-        f_max: Optional[float] = None,
+        f_max: float | None = None,
         with_delta: bool = True,
         with_energy: bool = True,
         delta_win_length: int = 5,
@@ -225,10 +234,7 @@ class LFCC(nn.Module):
         """
         super().__init__()
 
-        if crop not in CROP_MODES:
-            raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
-        if pad_mode not in PAD_MODES:
-            raise ValueError(f"pad_mode must be one of {PAD_MODES}, got {pad_mode}")
+        validate_frame_modes(crop, pad_mode)
         if n_lfcc > n_filter:
             raise ValueError(f"n_lfcc ({n_lfcc}) cannot exceed n_filter ({n_filter})")
 
@@ -239,7 +245,6 @@ class LFCC(nn.Module):
         self.with_delta = with_delta
         self.with_energy = with_energy
         self.delta_win_length = delta_win_length
-        self.n_features = n_lfcc * (3 if with_delta else 1)
 
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
