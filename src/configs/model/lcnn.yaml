@@ -1,0 +1,7 @@
+_target_: src.model.LCNN
+in_freq: 863
+in_frames: 600
+n_class: 2
+dropout: 0.75
+embedding_dim: 160
+return_embedding: false

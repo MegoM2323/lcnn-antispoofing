@@ -112,3 +112,7 @@ outputs/
 .vscode/
 .idea/
 __MACOSX/
+.agent-state/
+data/
+saved/
+*.pth

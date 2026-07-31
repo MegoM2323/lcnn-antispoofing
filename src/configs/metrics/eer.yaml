@@ -1,0 +1,12 @@
+device: "auto"
+train: # metrics that are calculated during training
+  - _target_: src.metrics.AccuracyMetric
+    name: "TRAIN_Accuracy"
+inference: # metrics that are calculated during inference (eval)
+  # running EER over the accumulated buffer; the epoch-level EER is computed
+  # separately by the trainer
+  - _target_: src.metrics.EERMetric
+    score_type: "llr"
+    name: "BatchEER"
+  - _target_: src.metrics.AccuracyMetric
+    name: "Accuracy"

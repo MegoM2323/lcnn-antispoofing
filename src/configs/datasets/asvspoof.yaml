@@ -1,0 +1,12 @@
+train:
+  _target_: src.datasets.ASVspoofDataset
+  part: "train"
+  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA/LA}
+  max_len: 64600
+  instance_transforms: ${transforms.instance_transforms.train}
+dev:
+  _target_: src.datasets.ASVspoofDataset
+  part: "dev"
+  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA/LA}
+  max_len: 64600
+  instance_transforms: ${transforms.instance_transforms.inference}

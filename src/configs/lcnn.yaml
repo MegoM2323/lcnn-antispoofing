@@ -1,0 +1,48 @@
+defaults:
+  - model: lcnn
+  - writer: cometml
+  - metrics: eer
+  - datasets: asvspoof
+  - dataloader: asvspoof
+  - transforms: stft
+  - _self_
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 3e-4
+  betas: [0.9, 0.999]
+  eps: 1e-8
+  weight_decay: 1e-4
+lr_scheduler:
+  # arXiv:2103.11326: lr is halved every 10 epochs. The template calls
+  # scheduler.step() after every batch, hence step_size is given in batches:
+  # 10 epochs * 793 batches (25380 train utterances / batch_size 32, drop_last).
+  # Keep it in sync with dataloader.batch_size.
+  _target_: torch.optim.lr_scheduler.StepLR
+  gamma: 0.5
+  step_size: 7930
+loss_function:
+  _target_: src.loss.CELoss
+  # LA train is imbalanced: 22800 spoof / 2580 bonafide = 8.84
+  class_weights: [1.0, 8.84]
+writer:
+  project_name: "asvspoof-lcnn"
+  workspace: null # taken from ~/.comet.config
+  run_name: "lcnn_stft"
+  loss_names: ["loss"]
+trainer:
+  log_step: 50
+  n_epochs: 30
+  epoch_len: null # null -> epoch-based training over the whole train partition
+  device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
+  resume_from: null # null or path to the checkpoint dir with *.pth and config.yaml
+  device: auto # device name or "auto"
+  use_amp: True # bf16 autocast: the 863x600 input makes activations the memory bottleneck
+  amp_dtype: bfloat16
+  max_grad_norm: 5
+  skip_oom: True
+  override: False # if True, will override the previous run with the same name
+  monitor: "min dev_EER" # the EER is computed over the whole dev partition, lower is better
+  save_period: 5 # checkpoint each save_period epochs in addition to the best epoch
+  early_stop: 10 # epochs for early stopping
+  save_dir: "saved"
+  seed: 1

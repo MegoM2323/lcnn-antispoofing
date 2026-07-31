@@ -1,13 +1,15 @@
 defaults:
-  - model: baseline
-  - metrics: example
-  - datasets: example_eval # we do not want to run inference on training data
-  - dataloader: example
-  - transforms: example
+  - model: lcnn
+  - metrics: eer
+  - datasets: asvspoof_eval # we do not want to run inference on training data
+  - dataloader: asvspoof
+  - transforms: stft
   - _self_
 inferencer:
   device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
   device: auto # device name or "auto"
-  save_path: "example" # any name here, can be a dataset name
+  use_amp: False # fp32 scores for the submission, bf16 only changes speed
+  amp_dtype: bfloat16
+  save_path: "eval" # predictions are saved to data/saved/${inferencer.save_path}
   seed: 1
-  from_pretrained: "saved/model_best.pth" # path to the pretrained model
+  from_pretrained: "saved/lcnn_stft/model_best.pth" # path to the pretrained model

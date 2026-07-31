@@ -1,0 +1,10 @@
+defaults:
+  - lcnn
+  - override /transforms: lfcc
+  - _self_
+model:
+  # LFCC front-end: 60 coefficients (20 static + delta + delta-delta) x 750 frames
+  in_freq: 60
+  in_frames: 750
+writer:
+  run_name: "lcnn_lfcc"

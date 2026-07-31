@@ -1,0 +1,39 @@
+# LFCC front-end from arXiv:2103.11326: 20 ms / 10 ms frames, 512-point FFT,
+# 20 linear triangular filters, c0 replaced by log energy, + delta + delta-delta.
+train:
+  data_object: # name of the tensor on which we apply transform
+    _target_: torch.nn.Sequential # to apply several transforms sequentially
+    _args_:
+      - _target_: src.transforms.LFCC
+        sample_rate: 16000
+        n_filter: 20
+        n_lfcc: 20
+        win_length: 320
+        hop_length: 160
+        n_fft: 512
+        with_delta: true
+        with_energy: true
+        n_frames: 750
+        crop: random
+        pad_mode: repeat
+      # augmentation is off by default, uncomment to enable
+      # - _target_: src.transforms.SpecAugment
+      #   freq_mask_param: 8
+      #   time_mask_param: 40
+      #   p: 0.5
+inference:
+  data_object:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: src.transforms.LFCC
+        sample_rate: 16000
+        n_filter: 20
+        n_lfcc: 20
+        win_length: 320
+        hop_length: 160
+        n_fft: 512
+        with_delta: true
+        with_energy: true
+        n_frames: 750
+        crop: first
+        pad_mode: repeat

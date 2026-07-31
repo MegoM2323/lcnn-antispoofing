@@ -1,8 +1,8 @@
 _target_: src.logger.CometMLWriter
-project_name: "pytorch_template"
-workspace: null
+project_name: "asvspoof-lcnn"
+workspace: null # null -> the workspace from ~/.comet.config is used
 run_name: "testing"
-mode: "online"
+mode: "online" # "offline" writes a .zip next to the run instead of uploading
 loss_names: ["loss"] # which losses to log (useful for multi-loss tasks, s.a. GANs)
-log_checkpoints: False # set to True if you want to log save_dir with checkpoints to W&B
-id_length: 32 # length of the run_id
+log_checkpoints: False # set to True if you want to log checkpoints to Comet ML
+id_length: 32 # length of the run_id; Comet requires an alphanumeric key of 32-50 chars
