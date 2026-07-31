@@ -23,6 +23,7 @@ PROJECT_ROOT = Path(__file__).absolute().resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
 from src.metrics.eer_utils import compute_eer_percent  # noqa: E402
+from src.utils.protocol import read_protocol_entries  # noqa: E402
 
 # the protocol of the LA corpus, laid out as described in the README
 DEFAULT_PROTOCOL = os.environ.get(
@@ -92,21 +93,11 @@ def read_protocol(protocol_path: Path) -> list[tuple[str, int]]:
             order they appear in the protocol. The label is 1 for bonafide
             and 0 for spoof.
     """
-    trials = []
     try:
-        with protocol_path.open("r") as protocol:
-            for line_number, line in enumerate(protocol, start=1):
-                fields = line.strip().split()
-                if len(fields) != 5:
-                    raise ValueError(
-                        f"{protocol_path}:{line_number}: expected 5 fields, "
-                        f"got {len(fields)}"
-                    )
-                _, key, _, _, label = fields
-                trials.append((key, 1 if label == "bonafide" else 0))
+        entries = read_protocol_entries(protocol_path)
     except OSError as e:
         raise SystemExit(f"Cannot read the protocol '{protocol_path}': {e}")
-    return trials
+    return [(entry.utt_id, entry.label) for entry in entries]
 
 
 def read_scores(scores_path: Path) -> tuple[dict[str, float], list[str]]:
@@ -184,20 +175,26 @@ def compute_grade(eer: float) -> float:
     )
 
 
-def main() -> int:
+def validate_submission(scores_path: Path, protocol_path: Path) -> float | None:
     """
-    Run the checks and write the submission file.
+    Run every check the grading script would trip over and report the EER.
 
+    Used both by this script and by the tools that produce a csv, so that a
+    file is never handed over without having been read back the way the grader
+    reads it.
+
+    Args:
+        scores_path (Path): csv with the scores to check.
+        protocol_path (Path): eval protocol the csv is checked against.
     Returns:
-        exit_code (int): 0 if the submission is valid, 1 otherwise.
+        eer (float | None): EER in percents, None if the file is not gradeable.
+            The problems are printed, not raised.
     """
-    args = parse_args()
+    trials = read_protocol(protocol_path)
+    scores, errors = read_scores(scores_path)
 
-    trials = read_protocol(args.protocol)
-    scores, errors = read_scores(args.scores)
-
-    print(f"protocol: {len(trials)} trials from {args.protocol}")
-    print(f"scores:   {len(scores)} unique ids from {args.scores}")
+    print(f"protocol: {len(trials)} trials from {protocol_path}")
+    print(f"scores:   {len(scores)} unique ids from {scores_path}")
 
     missing = [key for key, _ in trials if key not in scores]
     if missing:
@@ -218,21 +215,35 @@ def main() -> int:
             print(f"  - {error}")
         if len(errors) > 20:
             print(f"  ... and {len(errors) - 20} more problems")
-        return 1
+        return None
 
     # the same computation as in grading.py: the official compute_eer over the
     # scores ordered by the protocol
     ordered_scores = [scores[key] for key, _ in trials]
     labels = [label for _, label in trials]
     eer = compute_eer_percent(ordered_scores, labels)
-    grade = compute_grade(eer)
 
     bonafide_count = sum(labels)
     print(
         f"\nbonafide trials: {bonafide_count}, spoof trials: {len(labels) - bonafide_count}"
     )
     print(f"EER: {eer:.4f}%")
-    print(f"expected performance grade: {grade:.2f} / 10")
+    print(f"expected performance grade: {compute_grade(eer):.2f} / 10")
+
+    return eer
+
+
+def main() -> int:
+    """
+    Run the checks and write the submission file.
+
+    Returns:
+        exit_code (int): 0 if the submission is valid, 1 otherwise.
+    """
+    args = parse_args()
+
+    if validate_submission(args.scores, args.protocol) is None:
+        return 1
 
     if not args.no_copy:
         try:
