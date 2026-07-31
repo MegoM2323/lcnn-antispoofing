@@ -180,8 +180,13 @@ class BaseTrainer:
                 logs, not_improved_count
             )
 
-            if epoch % self.save_period == 0 or best:
-                self._save_checkpoint(epoch, save_best=best, only_best=True)
+            # A periodic checkpoint is kept even when the epoch is the best one:
+            # on ASVspoof2019 LA the dev EER saturates at 0.0 and almost every
+            # epoch counts as "best", so only_best=True would leave a single
+            # overwritten model_best.pth and no history to fall back on.
+            periodic = epoch % self.save_period == 0
+            if periodic or best:
+                self._save_checkpoint(epoch, save_best=best, only_best=not periodic)
 
             if stop_process:  # early_stop
                 break
