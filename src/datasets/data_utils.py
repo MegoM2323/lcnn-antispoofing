@@ -2,7 +2,7 @@ from itertools import repeat
 
 from hydra.utils import instantiate
 
-from src.datasets.collate import collate_fn
+from src.datasets.collate import DEFAULT_MAX_LEN, get_collate_fn
 from src.utils.init_utils import set_worker_seed
 
 
@@ -65,6 +65,10 @@ def get_dataloaders(config, device):
     # dataset partitions init
     datasets = instantiate(config.datasets)  # instance transforms are defined inside
 
+    # the waveform length of a batch is shared by all the partitions:
+    # the model input size depends on it
+    collate = get_collate_fn(config.get("collate_max_len", DEFAULT_MAX_LEN))
+
     # dataloaders init
     dataloaders = {}
     for dataset_partition in config.datasets.keys():
@@ -78,7 +82,7 @@ def get_dataloaders(config, device):
         partition_dataloader = instantiate(
             config.dataloader,
             dataset=dataset,
-            collate_fn=collate_fn,
+            collate_fn=collate,
             drop_last=(dataset_partition == "train"),
             shuffle=(dataset_partition == "train"),
             worker_init_fn=set_worker_seed,

@@ -22,7 +22,9 @@ def main(config):
     Args:
         config (DictConfig): hydra experiment config.
     """
-    set_random_seed(config.inferencer.seed)
+    set_random_seed(
+        config.inferencer.seed, config.inferencer.get("cudnn_benchmark", False)
+    )
 
     if config.inferencer.device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"

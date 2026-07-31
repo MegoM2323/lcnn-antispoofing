@@ -6,6 +6,7 @@ defaults:
   - dataloader: example
   - transforms: example
   - _self_
+collate_max_len: 1024 # the example objects are vectors of model.n_feats
 optimizer:
   _target_: torch.optim.Adam
   lr: 3e-4

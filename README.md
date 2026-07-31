@@ -10,7 +10,7 @@
 Проект построен на
 [PyTorch Project Template](https://github.com/Blinorot/pytorch_project_template):
 конфигурация через [Hydra](https://hydra.cc/), логирование экспериментов через
-[WandB](https://docs.wandb.ai/).
+[Comet ML](https://www.comet.com/docs/v2/).
 
 ## Содержание
 
@@ -99,8 +99,26 @@ pip install -r requirements.txt --extra-index-url https://download.pytorch.org/w
 pre-commit install
 ```
 
-Логирование в WandB требует однократного `wandb login`. Если трекер не нужен,
-запускайте с `writer.mode=offline`.
+### Настройка трекера экспериментов
+
+Логи пишутся в [Comet ML](https://www.comet.com/). Нужен API-ключ: либо
+переменная окружения, либо файл `~/.comet.config`, который создаётся при первом
+`comet login` и подхватывается автоматически.
+
+```bash
+export COMET_API_KEY=<ваш ключ>
+# либо ~/.comet.config:
+# [comet]
+# api_key = <ваш ключ>
+```
+
+Workspace берётся из того же файла; при работе в команде его можно задать явно
+через `writer.workspace=<workspace>`. Проект по умолчанию — `asvspoof-lcnn`.
+
+Без интернета запускайте с `writer.mode=offline`: эксперимент сложится в
+`.cometml-runs/<id>.zip` рядом с запуском и загрузится позже командой
+`comet upload <файл>.zip`. Если вместо Comet нужен WandB, добавьте к запуску
+`writer=wandb` (потребуется `wandb login`).
 
 ## Данные
 
@@ -171,10 +189,29 @@ python3 train.py -cn=lcnn dataloader.batch_size=16 trainer.n_epochs=50 \
 | `from_pretrained` | инициализировать веса из произвольного `.pth`                 |
 | `monitor`       | метрика для лучшего чекпоинта, по умолчанию `min dev_EER`       |
 | `early_stop`    | сколько эпох без улучшения ждать до остановки                   |
+| `cudnn_benchmark` | автоподбор алгоритмов свёрток, по умолчанию `False`           |
+
+Про `cudnn_benchmark` отдельно: размер входа здесь фиксирован (863×600), поэтому
+автоподбор алгоритмов cuDNN окупается — замер даёт ускорение в 2.1 раза
+(70 → 145 утт/с). Плата — воспроизводимость: алгоритм выбирается по замерам
+времени и может отличаться от запуска к запуску, так что при одном и том же
+`trainer.seed` результаты совпадают лишь приблизительно. По умолчанию стоит
+`False` (`cudnn.deterministic=True`), для ускорения:
+
+```bash
+python3 train.py -cn=lcnn trainer.cudnn_benchmark=True
+```
+
+Тот же ключ есть у `inferencer` в `inference.yaml`.
+
+Длина окна, до которой доводится каждая запись в батче, задаётся одним
+параметром `collate_max_len` (по умолчанию 64600 отсчётов, ~4.04 с при 16 кГц):
+на него ссылается и `max_len` датасетов (обрезка при чтении файла), и
+`collate_fn`. Меняя его, не забудьте про `model.in_frames`.
 
 Чекпоинты и конфиг запуска пишутся в `saved/${writer.run_name}/`, лучший —
-`model_best.pth`. В WandB логируются лосс на train/dev, `dev_EER`, learning rate,
-норма градиента и гистограммы скоров отдельно для bonafide и spoof: их
+`model_best.pth`. В Comet ML логируются лосс на train/dev, `dev_EER`, learning
+rate, норма градиента и гистограммы скоров отдельно для bonafide и spoof: их
 расхождение наглядно показывает, насколько классы разделимы.
 
 ## Инференс и сабмит
@@ -234,7 +271,7 @@ submission saved to /path/to/mppanin.csv
 │   ├── loss/                 # CE и margin-based лоссы
 │   ├── metrics/              # EER (официальная реализация), accuracy
 │   ├── trainer/              # Trainer и Inferencer
-│   ├── logger/               # WandB / Comet ML
+│   ├── logger/               # Comet ML / WandB
 │   └── utils/                # инициализация, seed, io
 └── requirements.txt
 ```

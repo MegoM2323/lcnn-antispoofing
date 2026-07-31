@@ -105,7 +105,8 @@ def read_scores(scores_path: Path) -> tuple[dict[str, float], list[str]]:
     """
     Read the csv with the model scores, exactly as strictly as the grading
     script reads it (and a bit stricter: malformed rows are reported instead
-    of being silently skipped).
+    of being silently skipped). Only empty lines are ignored, the grader
+    ignores them too.
 
     Args:
         scores_path (Path): path to the csv with the scores.
@@ -118,6 +119,10 @@ def read_scores(scores_path: Path) -> tuple[dict[str, float], list[str]]:
     try:
         with scores_path.open("r", newline="") as file:
             for line_number, row in enumerate(csv.reader(file), start=1):
+                if not row:
+                    # an empty line (the trailing newline included) is skipped
+                    # by the grader as well and breaks nothing
+                    continue
                 if len(row) != 2:
                     errors.append(
                         f"line {line_number}: expected 2 columns, got {len(row)}"
@@ -125,7 +130,14 @@ def read_scores(scores_path: Path) -> tuple[dict[str, float], list[str]]:
                     continue
 
                 key, raw_score = row
-                key = key.strip()
+                if key != key.strip():
+                    # the grader looks the id up as is, so a padded id is a
+                    # KeyError there: it must not be silently repaired here
+                    errors.append(
+                        f"line {line_number}: id '{key}' is padded with whitespace"
+                    )
+                    continue
+
                 try:
                     score = float(raw_score)
                 except ValueError:

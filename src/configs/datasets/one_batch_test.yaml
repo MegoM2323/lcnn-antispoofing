@@ -1,16 +1,16 @@
 train:
   _target_: src.datasets.ASVspoofDataset
   part: "train"
-  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA/LA}
-  max_len: 64600
+  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA}
+  max_len: ${collate_max_len}
   random_crop: False # the same waveforms on each epoch to overfit a single batch
   shuffle_index: True # both partitions get the same subset (fixed seed 42)
   limit: 64
 dev:
   _target_: src.datasets.ASVspoofDataset
   part: "train"
-  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA/LA}
-  max_len: 64600
+  data_dir: ${oc.env:ASVSPOOF_DIR,/home/mego/data/Homework/Practice/data/LA}
+  max_len: ${collate_max_len}
   random_crop: False
   shuffle_index: True
   limit: 64

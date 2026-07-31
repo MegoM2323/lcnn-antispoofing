@@ -2,10 +2,14 @@ defaults:
   - lcnn
   - override /datasets: one_batch_test
   - _self_
+model:
+  dropout: 0.0 # a memorized batch must give a near-zero loss, not a noisy one
 dataloader:
   # the sanity check runs on 64 fixed utterances, workers are not needed
   num_workers: 2
   persistent_workers: False
+  # fp32 with the 863x600 input does not fit into 12 GB with the default 32
+  batch_size: 16
 lr_scheduler:
   step_size: 1000000 # constant lr: the model must overfit, not converge
 loss_function:

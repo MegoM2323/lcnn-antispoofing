@@ -202,6 +202,10 @@ class BaseTrainer:
         self.train_metrics.reset()
         self.writer.set_step((epoch - 1) * self.epoch_len)
         self.writer.add_scalar("epoch", epoch)
+        # kept outside the loop: with skip_oom every batch of the epoch may be
+        # skipped, and the logs still have to be defined
+        last_train_metrics = {}
+        done_steps = 0
         for batch_idx, batch in enumerate(
             tqdm(self.train_dataloader, desc="train", total=self.epoch_len)
         ):
@@ -218,6 +222,7 @@ class BaseTrainer:
                 else:
                     raise e
 
+            done_steps += 1
             self.train_metrics.update("grad_norm", self._get_grad_norm())
 
             # log current results
@@ -239,6 +244,16 @@ class BaseTrainer:
                 self.train_metrics.reset()
             if batch_idx + 1 >= self.epoch_len:
                 break
+
+        if done_steps == 0:
+            self.logger.warning(
+                f"Epoch {epoch}: every batch ran out of GPU memory and was skipped "
+                "(skip_oom=True), the model was not updated. Reduce "
+                "dataloader.batch_size or enable trainer.use_amp."
+            )
+        elif not last_train_metrics:
+            # log_step is larger than the epoch: report what has been accumulated
+            last_train_metrics = self.train_metrics.result()
 
         logs = last_train_metrics
 
@@ -499,7 +514,9 @@ class BaseTrainer:
         """
         resume_path = str(resume_path)
         self.logger.info(f"Loading checkpoint: {resume_path} ...")
-        checkpoint = torch.load(resume_path, self.device)
+        # weights_only=False: the checkpoint stores the hydra config object,
+        # which the safe unpickler of torch>=2.6 refuses to load
+        checkpoint = torch.load(resume_path, map_location=self.device, weights_only=False)
         self.start_epoch = checkpoint["epoch"] + 1
         self.mnt_best = checkpoint["monitor_best"]
 
@@ -545,7 +562,10 @@ class BaseTrainer:
             self.logger.info(f"Loading model weights from: {pretrained_path} ...")
         else:
             print(f"Loading model weights from: {pretrained_path} ...")
-        checkpoint = torch.load(pretrained_path, self.device)
+        # weights_only=False: '_save_checkpoint' stores the hydra config object
+        checkpoint = torch.load(
+            pretrained_path, map_location=self.device, weights_only=False
+        )
 
         if checkpoint.get("state_dict") is not None:
             self.model.load_state_dict(checkpoint["state_dict"])

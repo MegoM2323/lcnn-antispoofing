@@ -1,6 +1,5 @@
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 
@@ -73,10 +72,13 @@ class CometMLWriter:
                 self.exp.set_name(run_name)
                 self.exp.log_parameters(parameters=project_config)
 
-            self.comel_ml = comet_ml
+            self.comet_ml = comet_ml
 
-        except ImportError:
-            logger.warning("For use comet_ml install it via \n\t pip install comet_ml")
+        except ImportError as e:
+            # without an experiment object every add_* call would fail later
+            # with a confusing AttributeError, so fail here instead
+            logger.error("For use comet_ml install it via \n\t pip install comet_ml")
+            raise e
 
         self.step = 0
         # the mode is usually equal to the current partition name
@@ -223,10 +225,6 @@ class CometMLWriter:
         # It is kept for consistency with WandB
 
         values_for_hist = values_for_hist.detach().cpu().numpy()
-
-        # np_hist = np.histogram(values_for_hist, bins=bins)
-        # if np_hist[0].shape[0] > 512:
-        #     np_hist = np.histogram(values_for_hist, bins=512)
 
         self.exp.log_histogram_3d(
             values=values_for_hist, name=self._object_name(hist_name), step=self.step

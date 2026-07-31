@@ -80,7 +80,8 @@ class BaseDataset(Dataset):
         Returns:
             data_object (Tensor):
         """
-        data_object = torch.load(path)
+        # a dataset object is a plain tensor: the safe unpickler is enough
+        data_object = torch.load(path, weights_only=True)
         return data_object
 
     def preprocess_data(self, instance_data):

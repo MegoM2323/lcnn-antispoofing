@@ -12,10 +12,10 @@ matplotlib==3.11.1
 scikit-learn==1.9.0
 soundfile==0.14.0
 tqdm==4.70.0
-wandb==0.28.1
+comet_ml==3.58.4
 
-# experiment tracking alternative to wandb (src/logger/cometml.py)
-comet_ml
+# optional alternative tracker (src/logger/wandb.py, writer: wandb)
+wandb==0.28.1
 
 # used by the metric examples of the template
 torchmetrics
@@ -24,3 +24,4 @@ black==26.5.1
 isort==8.0.1
 flake8==7.3.0
 pre-commit
+pytest==9.1.1
