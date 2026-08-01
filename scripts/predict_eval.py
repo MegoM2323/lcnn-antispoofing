@@ -104,10 +104,17 @@ def build_run_config(
             "of the model cannot be reproduced."
         )
 
-    model = saved_config.get("model")
     # runs made before the embedding head was dropped store a flag the model
-    # does not take any more
-    model.pop("return_embedding", None)
+    # does not take any more, so the saved config is copied without it
+    model = OmegaConf.create(
+        {
+            key: value
+            for key, value in OmegaConf.to_container(
+                saved_config.get("model"), resolve=True
+            ).items()
+            if key != "return_embedding"
+        }
+    )
 
     return OmegaConf.create(
         {
