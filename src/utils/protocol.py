@@ -11,10 +11,6 @@ unmounted, hence a standalone reader.
 from pathlib import Path
 from typing import NamedTuple
 
-PROTOCOL_FIELDS = 5
-BONAFIDE_LABEL = "bonafide"
-BONAFIDE_ATTACK = "-"
-
 
 class ProtocolEntry(NamedTuple):
     """
@@ -34,12 +30,7 @@ class ProtocolEntry(NamedTuple):
 
 def read_protocol_entries(protocol_path: str | Path) -> list[ProtocolEntry]:
     """
-    Read a CM protocol file.
-
-    Args:
-        protocol_path (str | Path): path to an ASVspoof2019 LA protocol.
-    Returns:
-        entries (list[ProtocolEntry]): trials in the order of the protocol.
+    Read a CM protocol file into the trials, in the order of the protocol.
     """
     protocol_path = Path(protocol_path)
 
@@ -49,16 +40,14 @@ def read_protocol_entries(protocol_path: str | Path) -> list[ProtocolEntry]:
             fields = line.split()
             if not fields:
                 continue
-            if len(fields) != PROTOCOL_FIELDS:
+            if len(fields) != 5:
                 raise ValueError(
-                    f"{protocol_path}:{line_number}: expected "
-                    f"{PROTOCOL_FIELDS} fields, got {len(fields)}"
+                    f"{protocol_path}:{line_number}: expected 5 fields, "
+                    f"got {len(fields)}"
                 )
 
             _, utt_id, _, attack_id, label = fields
-            entries.append(
-                ProtocolEntry(utt_id, attack_id, int(label == BONAFIDE_LABEL))
-            )
+            entries.append(ProtocolEntry(utt_id, attack_id, int(label == "bonafide")))
 
     return entries
 
@@ -68,26 +57,8 @@ def filter_entries(
 ) -> list[ProtocolEntry]:
     """
     Keep the trials of a subset of utterances, in the order of the protocol.
-
-    Args:
-        entries (list[ProtocolEntry]): trials of the whole protocol.
-        utt_ids (set[str] | None): ids to keep, None keeps everything.
-    Returns:
-        entries (list[ProtocolEntry]): selected trials.
+    None keeps everything.
     """
     if utt_ids is None:
         return list(entries)
     return [entry for entry in entries if entry.utt_id in utt_ids]
-
-
-def read_utt_ids(path: str | Path) -> list[str]:
-    """
-    Read a list of utterance ids, one per line.
-
-    Args:
-        path (str | Path): text file with the ids, empty lines are skipped.
-    Returns:
-        utt_ids (list[str]): ids in the order of the file.
-    """
-    with Path(path).open("r") as file:
-        return [line.strip() for line in file if line.strip()]

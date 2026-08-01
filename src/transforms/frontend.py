@@ -13,6 +13,9 @@ from torch import nn
 CROP_MODES = ("first", "random")
 PAD_MODES = ("repeat", "zero")
 
+EPS = 1e-8  # additive constant under the logarithms
+DELTA_WIN_LENGTH = 5  # window of the delta/delta-delta filter
+
 
 def fix_frames(
     spec: torch.Tensor, n_frames: int, crop: str, pad_mode: str
@@ -23,16 +26,9 @@ def fix_frames(
     Sequences shorter than n_frames are padded, longer ones are cropped.
     Repeat padding (cyclic repetition of the utterance) is used in the
     ASVspoof literature instead of zero padding, because silence carries
-    no spoofing cues and biases the network.
-
-    Args:
-        spec (Tensor): features of shape (..., F, T).
-        n_frames (int): required number of frames.
-        crop (str): "first" to take the leading frames, "random" to take
-            a random slice (useful as a train-time augmentation).
-        pad_mode (str): "repeat" for cyclic padding, "zero" for zeros.
-    Returns:
-        spec (Tensor): features of shape (..., F, n_frames).
+    no spoofing cues and biases the network. 'crop' is "first" (the leading
+    frames, used at inference) or "random" (a train-time augmentation),
+    'pad_mode' is "repeat" or "zero".
     """
     n_cur = spec.shape[-1]
     if n_cur == n_frames:
@@ -53,45 +49,16 @@ def fix_frames(
 
 
 def validate_frame_modes(crop: str, pad_mode: str) -> None:
-    """
-    Check the way a front-end brings a sequence to the fixed length.
-
-    Args:
-        crop (str): one of CROP_MODES, see fix_frames.
-        pad_mode (str): one of PAD_MODES, see fix_frames.
-    """
+    # a typo here does not fail, it silently changes the input of the model
     if crop not in CROP_MODES:
         raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
     if pad_mode not in PAD_MODES:
         raise ValueError(f"pad_mode must be one of {PAD_MODES}, got {pad_mode}")
 
 
-def as_batched_waveform(x: torch.Tensor) -> torch.Tensor:
-    """
-    Normalize the waveform layout to (B, T).
-
-    Args:
-        x (Tensor): waveform of shape (T,), (B, T) or (B, 1, T).
-    Returns:
-        x (Tensor): waveform of shape (B, T).
-    """
-    if x.dim() == 1:
-        return x.unsqueeze(0)
-    if x.dim() == 3 and x.shape[1] == 1:
-        return x.squeeze(1)
-    if x.dim() != 2:
-        raise ValueError(f"Expected waveform of shape (B, T), got {tuple(x.shape)}")
-    return x
-
-
 def autocast_dtype(device_type: str) -> torch.dtype | None:
     """
-    Get the dtype the surrounding autocast region expects, if any.
-
-    Args:
-        device_type (str): device type of the input tensor.
-    Returns:
-        dtype (torch.dtype | None): autocast dtype or None if disabled.
+    Dtype the surrounding autocast region expects, None if it is disabled.
     """
     if torch.is_autocast_enabled(device_type):
         return torch.get_autocast_dtype(device_type)
@@ -115,27 +82,11 @@ class LogSpectrogram(nn.Module):
         hop_length: int = 130,
         window: str = "blackman",
         power: float = 2.0,
-        eps: float = 1e-8,
+        eps: float = EPS,
         n_frames: int = 600,
         crop: str = "first",
         pad_mode: str = "repeat",
-        center: bool = True,
-        stft_pad_mode: str = "reflect",
     ) -> None:
-        """
-        Args:
-            n_fft (int): FFT size, defines n_fft // 2 + 1 frequency bins.
-            win_length (int): analysis window length in samples.
-            hop_length (int): frame step in samples (0.0081 s at 16 kHz).
-            window (str): "blackman", "hann" or "hamming".
-            power (float): exponent of the magnitude spectrum (2.0 = power).
-            eps (float): additive constant under the logarithm.
-            n_frames (int): fixed number of output frames.
-            crop (str): "first" or "random", see fix_frames.
-            pad_mode (str): "repeat" or "zero", see fix_frames.
-            center (bool): whether STFT pads the signal on both sides.
-            stft_pad_mode (str): padding mode used by STFT when center is True.
-        """
         super().__init__()
 
         validate_frame_modes(crop, pad_mode)
@@ -144,8 +95,6 @@ class LogSpectrogram(nn.Module):
             "hann": torch.hann_window,
             "hamming": torch.hamming_window,
         }
-        if window not in window_fns:
-            raise ValueError(f"window must be one of {tuple(window_fns)}, got {window}")
 
         self.eps = eps
         self.n_frames = n_frames
@@ -158,18 +107,12 @@ class LogSpectrogram(nn.Module):
             hop_length=hop_length,
             window_fn=window_fns[window],
             power=power,
-            center=center,
-            pad_mode=stft_pad_mode,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Args:
-            x (Tensor): waveform of shape (B, T).
-        Returns:
-            spec (Tensor): log power spectrum of shape (B, n_freqs, n_frames).
+        Turn a batch of waveforms (B, T) into (B, n_freqs, n_frames).
         """
-        x = as_batched_waveform(x)
         out_dtype = autocast_dtype(x.device.type)
 
         # STFT is numerically unstable (and partially unsupported) in bf16/fp16,
@@ -206,62 +149,32 @@ class LFCC(nn.Module):
         win_length: int = 320,
         hop_length: int = 160,
         n_fft: int = 512,
-        f_min: float = 0.0,
-        f_max: float | None = None,
         with_delta: bool = True,
         with_energy: bool = True,
-        delta_win_length: int = 5,
-        eps: float = 1e-8,
         n_frames: int = 750,
         crop: str = "first",
         pad_mode: str = "repeat",
-        center: bool = True,
     ) -> None:
-        """
-        Args:
-            sample_rate (int): waveform sample rate.
-            n_filter (int): number of linearly spaced triangular filters.
-            n_lfcc (int): number of cepstral coefficients kept after DCT.
-            win_length (int): analysis window length in samples (20 ms).
-            hop_length (int): frame step in samples (10 ms).
-            n_fft (int): FFT size.
-            f_min (float): lowest filterbank frequency in Hz.
-            f_max (float | None): highest filterbank frequency, defaults to
-                the Nyquist frequency.
-            with_delta (bool): append delta and delta-delta coefficients.
-            with_energy (bool): replace c0 with the log spectral energy.
-            delta_win_length (int): window used by compute_deltas.
-            eps (float): additive constant under the logarithms.
-            n_frames (int): fixed number of output frames.
-            crop (str): "first" or "random", see fix_frames.
-            pad_mode (str): "repeat" or "zero", see fix_frames.
-            center (bool): whether STFT pads the signal on both sides.
-        """
         super().__init__()
 
         validate_frame_modes(crop, pad_mode)
-        if n_lfcc > n_filter:
-            raise ValueError(f"n_lfcc ({n_lfcc}) cannot exceed n_filter ({n_filter})")
 
-        self.eps = eps
         self.n_frames = n_frames
         self.crop = crop
         self.pad_mode = pad_mode
         self.with_delta = with_delta
         self.with_energy = with_energy
-        self.delta_win_length = delta_win_length
 
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
             win_length=win_length,
             hop_length=hop_length,
             power=2.0,
-            center=center,
         )
         fbanks = F.linear_fbanks(
             n_freqs=n_fft // 2 + 1,
-            f_min=f_min,
-            f_max=float(sample_rate // 2) if f_max is None else f_max,
+            f_min=0.0,
+            f_max=float(sample_rate // 2),
             n_filter=n_filter,
             sample_rate=sample_rate,
         )
@@ -270,27 +183,23 @@ class LFCC(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Args:
-            x (Tensor): waveform of shape (B, T).
-        Returns:
-            lfcc (Tensor): features of shape (B, n_features, n_frames).
+        Turn a batch of waveforms (B, T) into (B, n_features, n_frames).
         """
-        x = as_batched_waveform(x)
         out_dtype = autocast_dtype(x.device.type)
 
         with torch.autocast(device_type=x.device.type, enabled=False):
             spec = self.spectrogram(x.float())  # (B, n_freqs, T')
-            filtered = torch.log(spec.transpose(-1, -2) @ self.fbanks + self.eps)
+            filtered = torch.log(spec.transpose(-1, -2) @ self.fbanks + EPS)
             lfcc = filtered @ self.dct_mat  # (B, T', n_lfcc)
             lfcc = lfcc.transpose(-1, -2)
 
             if self.with_energy:
-                energy = torch.log(spec.sum(dim=-2) + self.eps)
+                energy = torch.log(spec.sum(dim=-2) + EPS)
                 lfcc = torch.cat([energy.unsqueeze(-2), lfcc[..., 1:, :]], dim=-2)
 
             if self.with_delta:
-                delta = F.compute_deltas(lfcc, win_length=self.delta_win_length)
-                delta2 = F.compute_deltas(delta, win_length=self.delta_win_length)
+                delta = F.compute_deltas(lfcc, win_length=DELTA_WIN_LENGTH)
+                delta2 = F.compute_deltas(delta, win_length=DELTA_WIN_LENGTH)
                 lfcc = torch.cat([lfcc, delta, delta2], dim=-2)
 
         lfcc = fix_frames(lfcc, self.n_frames, self.crop, self.pad_mode)

@@ -14,16 +14,5 @@ class AccuracyMetric(BaseMetric):
     """
 
     def __call__(self, logits: torch.Tensor, labels: torch.Tensor, **batch) -> float:
-        """
-        Args:
-            logits (Tensor): model output of shape (B, n_classes).
-            labels (Tensor): ground-truth labels of shape (B,).
-        Returns:
-            accuracy (float): share of correct predictions in the batch.
-        """
-        if logits.ndim != 2:
-            raise ValueError(
-                f"Expected logits of shape (B, n_classes), got {tuple(logits.shape)}"
-            )
         predictions = logits.detach().argmax(dim=-1)
         return (predictions == labels.detach()).float().mean().item()

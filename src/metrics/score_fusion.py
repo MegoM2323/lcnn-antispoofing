@@ -26,13 +26,8 @@ DEFAULT_NORMALIZATION = "rank"
 
 def z_normalize(scores: np.ndarray) -> np.ndarray:
     """
-    Center the scores and bring them to a unit standard deviation.
-
-    Args:
-        scores (np.ndarray): 1D array of detection scores.
-    Returns:
-        normalized (np.ndarray): 1D array with zero mean and unit std. A
-            constant set of scores carries no information and becomes zeros.
+    Center the scores and bring them to a unit standard deviation. A constant
+    set of scores carries no information and becomes zeros.
     """
     scores = as_float_array(scores)
     std = float(scores.std())
@@ -50,11 +45,6 @@ def rank_normalize(scores: np.ndarray) -> np.ndarray:
     zero) cannot drag the fusion after itself the way z-normalization lets it.
     Tied scores share the average rank, otherwise the order inside a tie would
     be decided by the order of the file.
-
-    Args:
-        scores (np.ndarray): 1D array of detection scores.
-    Returns:
-        normalized (np.ndarray): 1D array of ranks in [0, 1].
     """
     scores = as_float_array(scores)
     if scores.size < 2:
@@ -71,15 +61,6 @@ def rank_normalize(scores: np.ndarray) -> np.ndarray:
 def normalize_scores(
     scores: np.ndarray, method: str = DEFAULT_NORMALIZATION
 ) -> np.ndarray:
-    """
-    Apply the requested normalization.
-
-    Args:
-        scores (np.ndarray): 1D array of detection scores.
-        method (str): "rank" or "zscore".
-    Returns:
-        normalized (np.ndarray): normalized scores.
-    """
     if method == "rank":
         return rank_normalize(scores)
     if method == "zscore":
@@ -89,32 +70,24 @@ def normalize_scores(
 
 def check_same_keys(systems: Sequence[Mapping[str, float]]) -> list[str]:
     """
-    Check that every system scored exactly the same utterances.
+    Check that every system scored exactly the same utterances and return the
+    ids in the order of the first system.
 
     A fusion built on a partial intersection would silently produce a csv with
     a hole in it, and a hole is a KeyError in the grading script.
-
-    Args:
-        systems (Sequence[Mapping]): utt_id -> score of every system.
-    Returns:
-        utt_ids (list[str]): ids in the order of the first system.
     """
-    if not systems:
-        raise ValueError("Nothing to fuse: no scores were given")
-
     reference = list(systems[0])
     reference_set = set(reference)
     for position, system in enumerate(systems[1:], start=2):
         keys = set(system)
-        if keys == reference_set:
-            continue
-        missing = sorted(reference_set - keys)
-        extra = sorted(keys - reference_set)
-        raise ValueError(
-            f"System {position} scores another set of utterances: "
-            f"{len(missing)} ids are missing (e.g. {missing[:3]}), "
-            f"{len(extra)} are new (e.g. {extra[:3]})"
-        )
+        if keys != reference_set:
+            missing = sorted(reference_set - keys)
+            extra = sorted(keys - reference_set)
+            raise ValueError(
+                f"System {position} scores another set of utterances: "
+                f"{len(missing)} ids are missing (e.g. {missing[:3]}), "
+                f"{len(extra)} are new (e.g. {extra[:3]})"
+            )
 
     return reference
 
@@ -125,18 +98,9 @@ def fuse_scores(
     method: str = DEFAULT_NORMALIZATION,
 ) -> dict[str, float]:
     """
-    Combine the scores of several systems into one set.
-
-    Args:
-        systems (Sequence[Mapping]): utt_id -> score of every system.
-        weights (Sequence[float] | None): weight of every system, equal
-            weights by default. They are normalized to sum to one, so only
-            their proportion matters.
-        method (str): normalization applied to every system, see
-            NORMALIZATIONS.
-    Returns:
-        fused (dict[str, float]): utt_id -> fused score, in the order of the
-            first system.
+    Combine the scores of several systems into one set, in the order of the
+    first system. The weights are normalized to sum to one, so only their
+    proportion matters; equal weights by default.
     """
     utt_ids = check_same_keys(systems)
 
@@ -149,11 +113,9 @@ def fuse_scores(
         )
 
     weight_array = as_float_array(weights)
-    if np.any(weight_array < 0):
-        raise ValueError(f"Weights must be non-negative, got {list(weights)}")
     total_weight = float(weight_array.sum())
-    if total_weight == 0.0:
-        raise ValueError("The weights sum to zero, the fusion is undefined")
+    if np.any(weight_array < 0) or total_weight == 0.0:
+        raise ValueError(f"Weights must be non-negative and not all zero: {weights}")
 
     fused = np.zeros(len(utt_ids), dtype=np.float64)
     for system, weight in zip(systems, weight_array):

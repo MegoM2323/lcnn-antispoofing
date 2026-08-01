@@ -12,12 +12,6 @@ import torch
 # 4.87 s at 16 kHz
 DEFAULT_MAX_LEN = 77870
 
-# the length the waveforms were padded to before 'collate_max_len' appeared in
-# the configs (64600 samples, 4.04 s at 16 kHz, the value of the ASVspoof
-# recipes). Nothing pads to it any more, it is only needed to reconstruct the
-# input of a checkpoint trained back then, see src/trainer/config_check.py
-LEGACY_MAX_LEN = 64600
-
 
 def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
     """
@@ -51,17 +45,12 @@ def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dic
     same length. Converts individual items into a batch.
 
     Args:
-        dataset_items (list[dict]): list of objects from
-            dataset.__getitem__.
+        dataset_items (list[dict]): list of objects from dataset.__getitem__.
         max_len (int): number of samples in each waveform of the batch.
-            The default is DEFAULT_MAX_LEN, 4.87 seconds at 16 kHz.
     Returns:
         result_batch (dict[Tensor]): dict, containing batch-version
             of the tensors.
     """
-    if len(dataset_items) == 0:
-        raise ValueError("Cannot collate an empty list of dataset items")
-
     result_batch = {
         "data_object": torch.stack(
             [
@@ -72,26 +61,15 @@ def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dic
         "labels": torch.tensor(
             [elem["labels"] for elem in dataset_items], dtype=torch.long
         ),
+        "utt_id": [elem["utt_id"] for elem in dataset_items],
     }
-
-    if "utt_id" in dataset_items[0]:
-        result_batch["utt_id"] = [elem["utt_id"] for elem in dataset_items]
 
     return result_batch
 
 
 def get_collate_fn(max_len: int = DEFAULT_MAX_LEN) -> Callable[[list[dict]], dict]:
     """
-    Create a collate_fn with the given waveform length.
-
-    Used when the length has to be configured from the experiment config,
-    since collate_fn itself is passed to the dataloader without arguments.
-
-    Args:
-        max_len (int): number of samples in each waveform of the batch.
-    Returns:
-        collate_fn (Callable): collate function with a fixed max_len.
+    Create a collate_fn with the given waveform length, since collate_fn itself
+    is passed to the dataloader without arguments.
     """
-    if max_len <= 0:
-        raise ValueError(f"max_len should be positive, got {max_len}")
     return partial(collate_fn, max_len=max_len)

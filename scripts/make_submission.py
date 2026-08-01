@@ -1,14 +1,12 @@
 """
-Validate the eval scores produced by 'inference.py' and prepare the submission
-file for the course grading script.
+Read, check and write the csv with the eval scores.
 
-The checks below mirror 'grading.py': the grader builds a dict from the csv,
-skips malformed rows and then looks up *every* utterance of the protocol, so a
-missing (or malformed) row raises a KeyError and zeroes the grade. Everything
-that would break it is reported here instead.
+The checks mirror 'grading.py': the grader builds a dict from the csv and then
+looks up *every* utterance of the protocol, so a missing or malformed row is a
+KeyError there and a zero for the homework. The reading and writing helpers are
+shared with the other two scripts.
 
-Usage:
-    python3 scripts/make_submission.py data/saved/eval/eval_scores.csv
+    python3 scripts/make_submission.py data/saved/lfcc21/eval_scores.csv -o mppanin.csv
 """
 
 import argparse
@@ -17,24 +15,20 @@ import math
 import os
 import shutil
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).absolute().resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
+from src.metrics.attack_eer import attack_breakdown  # noqa: E402
 from src.metrics.eer_utils import compute_eer_percent  # noqa: E402
 from src.utils.protocol import read_protocol_entries  # noqa: E402
 
 # the protocol of the LA corpus, laid out as described in the README
+EVAL_PROTOCOL = "ASVspoof2019_LA_cm_protocols/ASVspoof2019.LA.cm.eval.trl.txt"
 DEFAULT_PROTOCOL = os.environ.get(
-    "ASVSPOOF_EVAL_PROTOCOL",
-    str(
-        PROJECT_ROOT
-        / "data"
-        / "LA"
-        / "ASVspoof2019_LA_cm_protocols"
-        / "ASVspoof2019.LA.cm.eval.trl.txt"
-    ),
+    "ASVSPOOF_EVAL_PROTOCOL", str(PROJECT_ROOT / "data" / "LA" / EVAL_PROTOCOL)
 )
 DEFAULT_SUBMISSION_NAME = "mppanin.csv"  # must match the university login
 
@@ -45,127 +39,71 @@ MAX_GRADE = 10.0
 MIN_LINEAR_GRADE = 2.0
 
 
-def parse_args() -> argparse.Namespace:
+def read_scores(scores_path: str | Path) -> tuple[dict[str, float], list[str]]:
     """
-    Parse the command line arguments.
-
-    Returns:
-        args (Namespace): parsed arguments.
-    """
-    parser = argparse.ArgumentParser(
-        description="Check the eval scores and prepare the submission file."
-    )
-    parser.add_argument(
-        "scores",
-        type=Path,
-        help="csv with the model scores (no header, 'utterance_id,score')",
-    )
-    parser.add_argument(
-        "-p",
-        "--protocol",
-        type=Path,
-        default=Path(DEFAULT_PROTOCOL),
-        help="ASVspoof2019 LA eval protocol (default: $ASVSPOOF_EVAL_PROTOCOL)",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        default=Path(DEFAULT_SUBMISSION_NAME),
-        help=f"path of the submission file (default: {DEFAULT_SUBMISSION_NAME})",
-    )
-    parser.add_argument(
-        "--no-copy",
-        action="store_true",
-        help="only run the checks, do not write the submission file",
-    )
-    return parser.parse_args()
-
-
-def read_protocol(protocol_path: Path) -> list[tuple[str, int]]:
-    """
-    Read the evaluation protocol.
-
-    Args:
-        protocol_path (Path): path to the ASVspoof2019 LA eval protocol.
-    Returns:
-        trials (list[tuple[str, int]]): (utterance_id, label) pairs in the
-            order they appear in the protocol. The label is 1 for bonafide
-            and 0 for spoof.
-    """
-    try:
-        entries = read_protocol_entries(protocol_path)
-    except OSError as e:
-        raise SystemExit(f"Cannot read the protocol '{protocol_path}': {e}")
-    return [(entry.utt_id, entry.label) for entry in entries]
-
-
-def read_scores(scores_path: Path) -> tuple[dict[str, float], list[str]]:
-    """
-    Read the csv with the model scores, exactly as strictly as the grading
-    script reads it (and a bit stricter: malformed rows are reported instead
-    of being silently skipped). Only empty lines are ignored, the grader
-    ignores them too.
-
-    Args:
-        scores_path (Path): path to the csv with the scores.
-    Returns:
-        scores (dict[str, float]): utterance_id -> score.
-        errors (list[str]): human-readable descriptions of the problems found.
+    Read the csv with the model scores and return them together with the
+    problems found. Empty lines are ignored, the grader ignores them too.
     """
     scores: dict[str, float] = {}
     errors: list[str] = []
-    try:
-        with scores_path.open("r", newline="") as file:
-            for line_number, row in enumerate(csv.reader(file), start=1):
-                if not row:
-                    # an empty line (the trailing newline included) is skipped
-                    # by the grader as well and breaks nothing
-                    continue
-                if len(row) != 2:
-                    errors.append(
-                        f"line {line_number}: expected 2 columns, got {len(row)}"
-                    )
-                    continue
+    with Path(scores_path).open("r", newline="") as file:
+        for line, row in enumerate(csv.reader(file), start=1):
+            if not row:
+                continue
+            if len(row) != 2:
+                errors.append(f"line {line}: {len(row)} columns instead of 2")
+                continue
 
-                key, raw_score = row
-                if key != key.strip():
-                    # the grader looks the id up as is, so a padded id is a
-                    # KeyError there: it must not be silently repaired here
-                    errors.append(
-                        f"line {line_number}: id '{key}' is padded with whitespace"
-                    )
-                    continue
+            key, raw_score = row
+            if key != key.strip():
+                # the grader looks the id up as is, so a padded id is a
+                # KeyError there: it must not be silently repaired here
+                errors.append(f"line {line}: id '{key}' is padded")
+                continue
 
-                try:
-                    score = float(raw_score)
-                except ValueError:
-                    errors.append(f"line {line_number}: '{raw_score}' is not a float")
-                    continue
+            try:
+                score = float(raw_score)
+            except ValueError:
+                errors.append(f"line {line}: '{raw_score}' is not a float")
+                continue
 
-                if not math.isfinite(score):
-                    errors.append(f"line {line_number}: score is {score}")
-                    continue
-                if key in scores:
-                    errors.append(f"line {line_number}: duplicated id '{key}'")
-                    continue
-
+            if not math.isfinite(score):
+                errors.append(f"line {line}: score is {score}")
+            elif key in scores:
+                errors.append(f"line {line}: duplicated id '{key}'")
+            else:
                 scores[key] = score
-    except OSError as e:
-        raise SystemExit(f"Cannot read the scores '{scores_path}': {e}")
 
     return scores, errors
 
 
-def compute_grade(eer: float) -> float:
-    """
-    Compute the expected performance grade for a given EER.
+def load_score_file(path: str | Path) -> dict[str, float]:
+    """Read a set of scores, refusing a malformed file when it is loaded."""
+    scores, errors = read_scores(path)
+    if errors:
+        listed = "\n".join(f"  - {error}" for error in errors[:10])
+        raise ValueError(f"'{path}' is malformed:\n{listed}")
+    if not scores:
+        raise ValueError(f"'{path}' holds no scores")
+    return scores
 
-    Args:
-        eer (float): equal error rate in percents (0-100).
-    Returns:
-        grade (float): grade in [0, 10].
+
+def write_score_csv(path: str | Path, scores: Mapping[str, float]) -> None:
     """
+    Write the scores in the submission format. 'repr' is used instead of a
+    fixed format: rounding a score creates ties between utterances that the
+    model separated, and ties move the EER.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as file:
+        writer = csv.writer(file)
+        for utt_id, score in scores.items():
+            writer.writerow([utt_id, repr(float(score))])
+
+
+def compute_grade(eer: float) -> float:
+    """Expected performance grade in [0, 10] for a given EER in percents."""
     if eer > EER_ZERO_GRADE:
         return 0.0
     if eer < EER_FULL_GRADE:
@@ -175,84 +113,71 @@ def compute_grade(eer: float) -> float:
     )
 
 
-def validate_submission(scores_path: Path, protocol_path: Path) -> float | None:
+def validate_submission(
+    scores_path: str | Path, protocol_path: str | Path
+) -> float | None:
     """
-    Run every check the grading script would trip over and report the EER.
-
-    Used both by this script and by the tools that produce a csv, so that a
-    file is never handed over without having been read back the way the grader
-    reads it.
-
-    Args:
-        scores_path (Path): csv with the scores to check.
-        protocol_path (Path): eval protocol the csv is checked against.
-    Returns:
-        eer (float | None): EER in percents, None if the file is not gradeable.
-            The problems are printed, not raised.
+    Run every check the grading script would trip over and report the EER, the
+    expected grade and the EER of every spoofing algorithm (each of them scored
+    against the whole bonafide pool, as in the official evaluation plan).
+    Returns None if the file is not gradeable; the problems are printed.
     """
-    trials = read_protocol(protocol_path)
-    scores, errors = read_scores(scores_path)
+    try:
+        entries = read_protocol_entries(protocol_path)
+        scores, errors = read_scores(scores_path)
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"Cannot read the protocol or the scores: {e}")
 
-    print(f"protocol: {len(trials)} trials from {protocol_path}")
-    print(f"scores:   {len(scores)} unique ids from {scores_path}")
-
-    missing = [key for key, _ in trials if key not in scores]
+    missing = [entry.utt_id for entry in entries if entry.utt_id not in scores]
     if missing:
-        errors.append(
-            f"{len(missing)} protocol ids are missing from the csv, "
-            f"e.g. {missing[:5]}"
-        )
-
-    protocol_keys = {key for key, _ in trials}
-    extra = [key for key in scores if key not in protocol_keys]
-    if extra:
-        # the grader ignores them, but they usually mean a wrong partition
-        print(f"warning: {len(extra)} ids are not in the protocol, e.g. {extra[:5]}")
+        errors.append(f"{len(missing)} protocol ids are missing, e.g. {missing[:5]}")
 
     if errors:
-        print("\nThe submission is INVALID:")
+        print(f"\n{scores_path} is INVALID:")
         for error in errors[:20]:
             print(f"  - {error}")
-        if len(errors) > 20:
-            print(f"  ... and {len(errors) - 20} more problems")
         return None
 
     # the same computation as in grading.py: the official compute_eer over the
     # scores ordered by the protocol
-    ordered_scores = [scores[key] for key, _ in trials]
-    labels = [label for _, label in trials]
-    eer = compute_eer_percent(ordered_scores, labels)
+    labels = [entry.label for entry in entries]
+    eer = compute_eer_percent([scores[entry.utt_id] for entry in entries], labels)
 
-    bonafide_count = sum(labels)
-    print(
-        f"\nbonafide trials: {bonafide_count}, spoof trials: {len(labels) - bonafide_count}"
-    )
+    print(f"\n{len(entries)} trials, {sum(labels)} of them bonafide")
     print(f"EER: {eer:.4f}%")
     print(f"expected performance grade: {compute_grade(eer):.2f} / 10")
+
+    print(f"\n{'attack':<8}{'trials':>8}{'EER':>12}")
+    for stats in sorted(attack_breakdown(scores, entries), key=lambda st: -st.eer):
+        print(f"{stats.attack_id:<8}{stats.n_trials:>8}{stats.eer:>11.4f}%")
 
     return eer
 
 
 def main() -> int:
-    """
-    Run the checks and write the submission file.
+    parser = argparse.ArgumentParser(
+        description="Check the eval scores and prepare the submission file."
+    )
+    parser.add_argument("scores", type=Path, help="csv with the model scores")
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path(DEFAULT_SUBMISSION_NAME),
+        help=f"path of the submission file (default: {DEFAULT_SUBMISSION_NAME})",
+    )
+    args = parser.parse_args()
 
-    Returns:
-        exit_code (int): 0 if the submission is valid, 1 otherwise.
-    """
-    args = parse_args()
-
-    if validate_submission(args.scores, args.protocol) is None:
+    if validate_submission(args.scores, DEFAULT_PROTOCOL) is None:
         return 1
 
-    if not args.no_copy:
-        try:
-            shutil.copyfile(args.scores, args.output)
-        except OSError as e:
-            print(f"Cannot write the submission file '{args.output}': {e}")
-            return 1
-        print(f"submission saved to {args.output.resolve()}")
+    try:
+        shutil.copyfile(args.scores, args.output)
+    except OSError as e:
+        print(f"Cannot write the submission file '{args.output}': {e}")
+        return 1
 
+    print(f"\nsubmission saved to {args.output.resolve()}")
     return 0
 
 

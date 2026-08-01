@@ -3,11 +3,9 @@ Index of the ASVspoof2019 LA partitions built from the official CM protocols,
 with the reading and the cropping of a single utterance.
 """
 
-import hashlib
 import json
 import logging
 import random
-from collections.abc import Mapping
 from pathlib import Path
 
 import soundfile as sf
@@ -18,8 +16,6 @@ from src.datasets.collate import DEFAULT_MAX_LEN
 from src.utils.io_utils import ROOT_PATH, read_json, write_json
 
 logger = logging.getLogger(__name__)
-
-PARTS = ("train", "dev", "eval")
 
 PROTOCOL_FILES = {
     "train": "ASVspoof2019.LA.cm.train.trn.txt",
@@ -36,9 +32,6 @@ AUDIO_DIRS = {
 PROTOCOL_DIR = "ASVspoof2019_LA_cm_protocols"
 
 LABELS = {"bonafide": 1, "spoof": 0}
-
-# bumped whenever the layout of the cached index changes
-INDEX_FORMAT_VERSION = 1
 
 
 class ASVspoofDataset(BaseDataset):
@@ -78,13 +71,8 @@ class ASVspoofDataset(BaseDataset):
             index_dir (str | None): directory for the cached index. Defaults
                 to ROOT_PATH / "data" / "index".
         """
-        if part not in PARTS:
-            raise ValueError(f"Unknown partition '{part}', expected one of {PARTS}")
-        if max_len is not None and max_len <= 0:
-            raise ValueError(f"max_len should be positive, got {max_len}")
-
         self.part = part
-        self.data_dir = Path(data_dir)
+        self.data_dir = Path(data_dir).absolute().resolve()
         self.max_len = max_len
         self.random_crop = (part == "train") if random_crop is None else random_crop
 
@@ -102,41 +90,11 @@ class ASVspoofDataset(BaseDataset):
 
         super().__init__(index, *args, **kwargs)
 
-    def _fingerprint(self) -> dict | None:
-        """
-        Identity of the data the index is built from.
-
-        The index stores absolute paths and labels, so it is only valid for
-        one corpus location and one revision of the protocol: without this
-        check a changed ASVSPOOF_DIR or an updated protocol would be served
-        from a stale cache.
-
-        Returns:
-            fingerprint (dict | None): format version, resolved data_dir,
-                protocol name and the md5 of its content. None if the protocol
-                cannot be read.
-        """
-        try:
-            protocol_md5 = hashlib.md5(self.protocol_path.read_bytes()).hexdigest()
-        except OSError:
-            return None
-
-        return {
-            "version": INDEX_FORMAT_VERSION,
-            "data_dir": str(self.data_dir.absolute().resolve()),
-            "protocol": PROTOCOL_FILES[self.part],
-            "protocol_md5": protocol_md5,
-        }
-
     def _load_cached_index(self, index_path: Path) -> list[dict] | None:
         """
-        Read the cached index if it was built from the very same data.
-
-        Args:
-            index_path (Path): path of the cached index.
-        Returns:
-            index (list[dict] | None): cached index, None if it is absent,
-                unreadable or stale, in which case it has to be rebuilt.
+        Read the cached index, unless it was built for another corpus: it
+        stores absolute paths, so a changed ASVSPOOF_DIR would silently be
+        served from a stale cache. None means the index has to be rebuilt.
         """
         if not index_path.exists():
             return None
@@ -144,31 +102,11 @@ class ASVspoofDataset(BaseDataset):
         try:
             cached = read_json(str(index_path))
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning(
-                f"Cannot read the cached index {index_path} ({e}), rebuilding it"
-            )
+            logger.warning(f"Cannot read the cached index {index_path} ({e})")
             return None
 
-        if not isinstance(cached, Mapping) or "index" not in cached:
-            logger.info(
-                f"The cached index {index_path} carries no provenance data "
-                "and cannot be verified, rebuilding it"
-            )
-            return None
-
-        fingerprint = self._fingerprint()
-        if fingerprint is None:
-            logger.warning(
-                f"Protocol {self.protocol_path} is not readable: the cached "
-                f"index {index_path} is used without verification"
-            )
-            return cached["index"]
-
-        if cached.get("fingerprint") != fingerprint:
-            logger.info(
-                f"The cached index {index_path} was built for another data_dir "
-                "or another revision of the protocol, rebuilding it"
-            )
+        if cached.get("data_dir") != str(self.data_dir):
+            logger.info(f"{index_path} was built for another data_dir, rebuilding it")
             return None
 
         return cached["index"]
@@ -177,45 +115,26 @@ class ASVspoofDataset(BaseDataset):
         """
         Parse the CM protocol of the partition and build the dataset index.
 
-        Args:
-            index_path (Path): path where the created index is cached.
-        Returns:
-            index (list[dict]): list, containing dict for each element of
-                the dataset with path, label and utterance metadata.
+        Every element gets its audio path, its binary label and the metadata
+        of the utterance; the result is cached in 'index_path'.
         """
-        protocol_path = self.protocol_path
-        audio_dir = self.audio_dir
-
-        if not protocol_path.exists():
-            raise FileNotFoundError(f"Protocol file is not found: {protocol_path}")
-        if not audio_dir.is_dir():
-            raise FileNotFoundError(f"Audio directory is not found: {audio_dir}")
-
         logger.info(f"Creating ASVspoof2019 LA index for '{self.part}' partition")
 
         index: list[dict] = []
         missing: list[str] = []
-        total = 0
-        with protocol_path.open("rt") as protocol_file:
+        with self.protocol_path.open("rt") as protocol_file:
             for line_number, line in enumerate(protocol_file, start=1):
                 fields = line.split()
                 if not fields:
                     continue
-                if len(fields) != 5:
+                if len(fields) != 5 or fields[4] not in LABELS:
                     raise ValueError(
-                        f"Malformed protocol line {line_number} in {protocol_path}: "
-                        f"expected 5 fields, got {len(fields)}"
+                        f"{self.protocol_path}:{line_number}: expected 5 fields "
+                        f"ending with a known label, got '{line.strip()}'"
                     )
 
                 speaker_id, utt_id, _, attack_id, label = fields
-                if label not in LABELS:
-                    raise ValueError(
-                        f"Unknown label '{label}' at line {line_number} "
-                        f"in {protocol_path}"
-                    )
-
-                total += 1
-                audio_path = audio_dir / f"{utt_id}.flac"
+                audio_path = self.audio_dir / f"{utt_id}.flac"
                 if not audio_path.exists():
                     if self.part == "eval":
                         # the grading script indexes the submission by every
@@ -223,10 +142,10 @@ class ASVspoofDataset(BaseDataset):
                         # file means a KeyError and a rejected submission
                         raise FileNotFoundError(
                             f"Audio file {audio_path} is missing, but it is "
-                            f"listed at line {line_number} of {protocol_path}. "
-                            "The eval index has to cover the whole protocol: "
-                            "an incomplete submission is not gradeable. Check "
-                            "that the corpus is fully unpacked."
+                            f"listed at line {line_number} of "
+                            f"{self.protocol_path}. The eval index has to cover "
+                            "the whole protocol: an incomplete submission is "
+                            "not gradeable. Check that the corpus is unpacked."
                         )
                     missing.append(utt_id)
                     continue
@@ -242,41 +161,25 @@ class ASVspoofDataset(BaseDataset):
                 )
 
         if missing:
-            examples = ", ".join(missing[:5])
             logger.warning(
-                f"Skipped {len(missing)} of {total} utterances of the "
-                f"'{self.part}' partition: audio files are missing "
-                f"(e.g. {examples})"
-            )
-        if len(index) == 0:
-            raise RuntimeError(
-                f"Index for '{self.part}' partition is empty, "
-                f"no audio files found in {audio_dir}"
+                f"Skipped {len(missing)} utterances of the '{self.part}' "
+                f"partition: audio files are missing (e.g. {missing[:5]})"
             )
 
         index_path.parent.mkdir(exist_ok=True, parents=True)
-        write_json(
-            {"fingerprint": self._fingerprint(), "index": index}, str(index_path)
-        )
+        write_json({"data_dir": str(self.data_dir), "index": index}, str(index_path))
 
         return index
 
     def __getitem__(self, ind: int) -> dict:
         """
-        Load an utterance and combine it with its metadata into a dict.
-
-        Args:
-            ind (int): index in the self._index list.
-        Returns:
-            instance_data (dict): dict with the audio ("data_object"),
-                the binary label ("labels") and the utterance id ("utt_id").
+        Load an utterance and combine it with its metadata into a dict with
+        the audio ("data_object"), the label ("labels") and the id ("utt_id").
         """
         data_dict = self._index[ind]
 
-        audio = self.load_object(data_dict["path"])
-
         instance_data = {
-            "data_object": audio.squeeze(0),
+            "data_object": self.load_object(data_dict["path"]).squeeze(0),
             "labels": data_dict["label"],
             "utt_id": data_dict["utt_id"],
         }
@@ -290,11 +193,6 @@ class ASVspoofDataset(BaseDataset):
         torchaudio.load requires the torchcodec backend since torchaudio 2.9,
         so soundfile is used directly. Reading only the required part of the
         file keeps the memory footprint of the workers low.
-
-        Args:
-            path (str): path to the audio file.
-        Returns:
-            data_object (Tensor): float32 waveform of shape (1, T).
         """
         try:
             with sf.SoundFile(path) as audio_file:
@@ -315,15 +213,8 @@ class ASVspoofDataset(BaseDataset):
 
     def _get_offset(self, frames: int) -> int:
         """
-        Get the start position of the cut for an utterance of 'frames' samples.
-
-        Args:
-            frames (int): total number of samples in the audio file.
-        Returns:
-            offset (int): index of the first sample to read.
+        Start position of the cut for an utterance of 'frames' samples.
         """
-        if self.max_len is None or frames <= self.max_len:
-            return 0
-        if not self.random_crop:
+        if self.max_len is None or frames <= self.max_len or not self.random_crop:
             return 0
         return random.randint(0, frames - self.max_len)

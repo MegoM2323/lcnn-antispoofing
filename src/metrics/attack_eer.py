@@ -38,14 +38,8 @@ def ordered_scores(
     scores: Mapping[str, float], entries: Sequence[ProtocolEntry]
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Lay the scores out in the order of the protocol.
-
-    Args:
-        scores (Mapping[str, float]): utt_id -> score.
-        entries (Sequence[ProtocolEntry]): trials to score.
-    Returns:
-        values (np.ndarray): scores in the order of 'entries'.
-        labels (np.ndarray): matching labels (1 = bonafide).
+    Lay the scores out in the order of the protocol, together with the
+    matching labels (1 = bonafide).
     """
     missing = [entry.utt_id for entry in entries if entry.utt_id not in scores]
     if missing:
@@ -63,14 +57,8 @@ def pooled_eer(
     scores: Mapping[str, float], entries: Sequence[ProtocolEntry]
 ) -> float | None:
     """
-    EER over a set of trials.
-
-    Args:
-        scores (Mapping[str, float]): utt_id -> score.
-        entries (Sequence[ProtocolEntry]): trials to score.
-    Returns:
-        eer (float | None): EER in percents, None if one of the two classes is
-            not represented and the metric is undefined.
+    EER over a set of trials, None if one of the two classes is not
+    represented and the metric is undefined.
     """
     values, labels = ordered_scores(scores, entries)
     bonafide_count = int(labels.sum())
@@ -83,15 +71,9 @@ def attack_breakdown(
     scores: Mapping[str, float], entries: Sequence[ProtocolEntry]
 ) -> list[AttackStats]:
     """
-    Compute the EER of every spoofing algorithm against the bonafide pool.
-
-    Args:
-        scores (Mapping[str, float]): utt_id -> score.
-        entries (Sequence[ProtocolEntry]): trials to score, bonafide included.
-    Returns:
-        breakdown (list[AttackStats]): one entry per attack, sorted by
-            attack id. Empty if the trials carry no bonafide utterance, since
-            without them no attack has an EER.
+    Compute the EER of every spoofing algorithm against the bonafide pool,
+    one AttackStats per attack, sorted by attack id. Empty if the trials carry
+    no bonafide utterance, since without them no attack has an EER.
     """
     bonafide = [entry for entry in entries if entry.label == 1]
     if not bonafide:

@@ -1,9 +1,0 @@
-_target_: src.model.LCNNLSTMSum
-in_freq: 863
-in_frames: 600
-n_class: 2
-dropout: 0.75
-embedding_dim: 160
-return_embedding: false
-hidden_size: 64
-num_layers: 2
