@@ -3,7 +3,7 @@ import csv
 import torch
 from tqdm.auto import tqdm
 
-from src.metrics.eer_utils import epoch_eer, logits_to_scores
+from src.metrics.eer_utils import compute_eer_percent, logits_to_scores
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
 
@@ -91,18 +91,6 @@ class Inferencer(BaseTrainer):
             for part, dataloader in self.evaluation_dataloaders.items()
         }
 
-    def move_batch_to_device(self, batch):
-        """
-        Переносит на устройство все нужные тензоры.
-
-        В отличие от базовой реализации, отсутствующие в батче тензоры молча
-        пропускаются: партиции без истинных меток не должны ломать инференс.
-        """
-        for tensor_for_device in self.cfg_trainer.device_tensors:
-            if tensor_for_device in batch:
-                batch[tensor_for_device] = batch[tensor_for_device].to(self.device)
-        return batch
-
     def process_batch(self, batch, metrics):
         """
         Прогоняет батч через модель, считает метрики и накапливает
@@ -123,8 +111,7 @@ class Inferencer(BaseTrainer):
 
         self._scores.append(logits_to_scores(batch["logits"]).cpu())
         self._utt_ids.extend(batch["utt_id"])
-        if batch.get("labels") is not None:
-            self._labels.append(batch["labels"].detach().reshape(-1).cpu())
+        self._labels.append(batch["labels"].detach().reshape(-1).cpu())
 
         return batch
 
@@ -147,8 +134,8 @@ class Inferencer(BaseTrainer):
             for batch in tqdm(dataloader, desc=part, total=len(dataloader)):
                 self.process_batch(batch=batch, metrics=self.evaluation_metrics)
 
-        scores = torch.cat(self._scores) if self._scores else torch.empty(0)
-        labels = torch.cat(self._labels) if self._labels else None
+        scores = torch.cat(self._scores)
+        labels = torch.cat(self._labels)
 
         self._save_scores(part, scores)
 
@@ -157,10 +144,7 @@ class Inferencer(BaseTrainer):
             if self.evaluation_metrics is not None
             else {}
         )
-        eer = epoch_eer(scores, labels, warn=print)
-        if eer is not None:
-            logs["EER"] = eer
-            print(f"{part} EER: {eer:.4f}%")
+        logs["EER"] = compute_eer_percent(scores.numpy(), labels.numpy())
 
         return logs
 
@@ -169,17 +153,8 @@ class Inferencer(BaseTrainer):
         Пишет '{part}_scores.csv' в формате посылки: без заголовка,
         "utterance_id,score", по строке на каждую запись партиции.
         """
-        if self.save_path is None:
-            return
-
         self.save_path.mkdir(exist_ok=True, parents=True)
-        csv_path = self.save_path / f"{part}_scores.csv"
-        try:
-            with csv_path.open("w", newline="") as file:
-                writer = csv.writer(file)
-                for utt_id, score in zip(self._utt_ids, scores.tolist()):
-                    writer.writerow([utt_id, repr(float(score))])
-        except OSError as e:
-            print(f"Failed to write scores to {csv_path}: {e}")
-        else:
-            print(f"Saved {scores.numel()} scores to {csv_path}")
+        with (self.save_path / f"{part}_scores.csv").open("w", newline="") as file:
+            writer = csv.writer(file)
+            for utt_id, score in zip(self._utt_ids, scores.tolist()):
+                writer.writerow([utt_id, repr(float(score))])

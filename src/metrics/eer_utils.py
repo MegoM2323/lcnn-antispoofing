@@ -12,17 +12,8 @@
 для numpy 2.x, которые общие для метрики, тренера и инференсера.
 """
 
-from collections.abc import Callable
-
 import numpy as np
 import torch
-
-# EER (в %), которое возвращается, когда один из двух классов отсутствует.
-# В официальном calculate_eer.py такого случая нет: ему всегда передают оба
-# класса, иначе было бы деление на ноль. Вместо nan берётся значение уровня
-# случайного угадывания, потому что один nan испортил бы бегущее среднее за
-# всю эпоху.
-DEGENERATE_EER = 50.0
 
 
 def compute_det_curve(
@@ -106,19 +97,14 @@ def compute_eer_percent(scores, labels) -> float:
 
     Соглашение о скорах то же, что в официальном проверяющем скрипте: чем выше
     скор, тем вероятнее bonafide, а испытания bonafide это те, у которых
-    label == 1. Скоры с обратным знаком дадут 100 - EER вместо EER. Если один
-    из классов отсутствует, возвращается DEGENERATE_EER.
+    label == 1. Скоры с обратным знаком дадут 100 - EER вместо EER.
     """
     scores_array = as_float_array(scores)
     labels_array = as_float_array(labels)
 
-    bonafide_scores = scores_array[labels_array == 1]
-    spoof_scores = scores_array[labels_array != 1]
-
-    if bonafide_scores.size == 0 or spoof_scores.size == 0:
-        return DEGENERATE_EER
-
-    eer, _ = compute_eer(bonafide_scores, spoof_scores)
+    eer, _ = compute_eer(
+        scores_array[labels_array == 1], scores_array[labels_array != 1]
+    )
     return float(eer) * 100
 
 
@@ -130,28 +116,3 @@ def logits_to_scores(logits: torch.Tensor) -> torch.Tensor:
     """
     logits = logits.detach().float()
     return logits[:, 1] - logits[:, 0]
-
-
-def epoch_eer(
-    scores: torch.Tensor | None,
-    labels: torch.Tensor | None,
-    warn: Callable[[str], None] | None = None,
-) -> float | None:
-    """
-    Считает EER по скорам целой партиции.
-
-    В отличие от compute_eer_percent, для вырожденной партиции возвращается
-    None, а не DEGENERATE_EER: значение уровня случайного угадывания в логах
-    выглядело бы как настоящий результат. В этом случае вызывается 'warn'
-    с пояснением.
-    """
-    if scores is None or labels is None or scores.numel() == 0:
-        return None
-
-    bonafide_count = int((labels == 1).sum())
-    if bonafide_count == 0 or bonafide_count == labels.numel():
-        if warn is not None:
-            warn("Cannot compute the EER: one of the classes is missing.")
-        return None
-
-    return compute_eer_percent(scores.numpy(), labels.numpy())

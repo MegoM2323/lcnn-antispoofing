@@ -3,7 +3,6 @@
 вместе с чтением и обрезкой отдельной записи.
 """
 
-import json
 import logging
 import random
 from pathlib import Path
@@ -101,14 +100,8 @@ class ASVspoofDataset(BaseDataset):
         if not index_path.exists():
             return None
 
-        try:
-            cached = read_json(str(index_path))
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"Cannot read the cached index {index_path} ({e})")
-            return None
-
-        if cached.get("data_dir") != str(self.data_dir):
-            logger.info(f"{index_path} was built for another data_dir, rebuilding it")
+        cached = read_json(str(index_path))
+        if cached["data_dir"] != str(self.data_dir):
             return None
 
         return cached["index"]
@@ -123,34 +116,22 @@ class ASVspoofDataset(BaseDataset):
         logger.info(f"Creating ASVspoof2019 LA index for '{self.part}' partition")
 
         index: list[dict] = []
-        missing: list[str] = []
         with self.protocol_path.open("rt") as protocol_file:
             for line_number, line in enumerate(protocol_file, start=1):
                 fields = line.split()
                 if not fields:
                     continue
-                if len(fields) != 5 or fields[4] not in LABELS:
-                    raise ValueError(
-                        f"{self.protocol_path}:{line_number}: expected 5 fields "
-                        f"ending with a known label, got '{line.strip()}'"
-                    )
 
                 speaker_id, utt_id, _, attack_id, label = fields
                 audio_path = self.audio_dir / f"{utt_id}.flac"
-                if not audio_path.exists():
-                    if self.part == "eval":
-                        # проверяющий скрипт ищет в посылке каждый
-                        # идентификатор из протокола, поэтому один
-                        # пропущенный файл это KeyError и отклонённая посылка
-                        raise FileNotFoundError(
-                            f"Audio file {audio_path} is missing, but it is "
-                            f"listed at line {line_number} of "
-                            f"{self.protocol_path}. The eval index has to cover "
-                            "the whole protocol: an incomplete submission is "
-                            "not gradeable. Check that the corpus is unpacked."
-                        )
-                    missing.append(utt_id)
-                    continue
+                if self.part == "eval" and not audio_path.exists():
+                    # проверяющий скрипт ищет в посылке каждый идентификатор
+                    # из протокола, поэтому один пропущенный файл это KeyError
+                    # и отклонённая посылка
+                    raise FileNotFoundError(
+                        f"Audio file {audio_path} is missing, but it is listed "
+                        f"at line {line_number} of {self.protocol_path}"
+                    )
 
                 index.append(
                     {
@@ -161,12 +142,6 @@ class ASVspoofDataset(BaseDataset):
                         "speaker_id": speaker_id,
                     }
                 )
-
-        if missing:
-            logger.warning(
-                f"Skipped {len(missing)} utterances of the '{self.part}' "
-                f"partition: audio files are missing (e.g. {missing[:5]})"
-            )
 
         index_path.parent.mkdir(exist_ok=True, parents=True)
         write_json({"data_dir": str(self.data_dir), "index": index}, str(index_path))
@@ -197,22 +172,14 @@ class ASVspoofDataset(BaseDataset):
         только нужного куска файла держит потребление памяти воркерами
         низким.
         """
-        try:
-            with sf.SoundFile(path) as audio_file:
-                offset = self._get_offset(audio_file.frames)
-                if offset > 0:
-                    audio_file.seek(offset)
-                frames = -1 if self.max_len is None else self.max_len
-                audio = audio_file.read(frames=frames, dtype="float32", always_2d=True)
-        except (sf.LibsndfileError, RuntimeError, OSError) as e:
-            logger.error(f"Failed to read audio file {path}: {e}")
-            raise RuntimeError(f"Cannot read audio file {path}") from e
+        with sf.SoundFile(path) as audio_file:
+            offset = self._get_offset(audio_file.frames)
+            if offset > 0:
+                audio_file.seek(offset)
+            frames = -1 if self.max_len is None else self.max_len
+            audio = audio_file.read(frames=frames, dtype="float32", always_2d=True)
 
-        data_object = torch.from_numpy(audio).T
-        if data_object.shape[0] > 1:
-            data_object = data_object.mean(dim=0, keepdim=True)
-
-        return data_object
+        return torch.from_numpy(audio).T
 
     def _get_offset(self, frames: int) -> int:
         """

@@ -36,29 +36,12 @@ def read_protocol_entries(protocol_path: str | Path) -> list[ProtocolEntry]:
 
     entries: list[ProtocolEntry] = []
     with protocol_path.open("r") as protocol:
-        for line_number, line in enumerate(protocol, start=1):
+        for line in protocol:
             fields = line.split()
             if not fields:
                 continue
-            if len(fields) != 5:
-                raise ValueError(
-                    f"{protocol_path}:{line_number}: expected 5 fields, "
-                    f"got {len(fields)}"
-                )
 
             _, utt_id, _, attack_id, label = fields
             entries.append(ProtocolEntry(utt_id, attack_id, int(label == "bonafide")))
 
     return entries
-
-
-def filter_entries(
-    entries: list[ProtocolEntry], utt_ids: set[str] | None
-) -> list[ProtocolEntry]:
-    """
-    Оставляет испытания заданного подмножества записей, в порядке протокола.
-    None оставляет всё.
-    """
-    if utt_ids is None:
-        return list(entries)
-    return [entry for entry in entries if entry.utt_id in utt_ids]

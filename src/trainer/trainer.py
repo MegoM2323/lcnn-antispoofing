@@ -1,7 +1,7 @@
 import torch
 from tqdm.auto import tqdm
 
-from src.metrics.eer_utils import epoch_eer, logits_to_scores
+from src.metrics.eer_utils import compute_eer_percent, logits_to_scores
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
 
@@ -105,11 +105,8 @@ class Trainer(BaseTrainer):
         logs = self.evaluation_metrics.result()
 
         scores, labels = self._collected_scores()
-        eer = epoch_eer(scores, labels, warn=self.logger.warning)
-        if eer is not None:
-            logs["EER"] = eer
-            if self.writer is not None:
-                self.writer.add_scalar("EER", eer)
+        logs["EER"] = compute_eer_percent(scores.numpy(), labels.numpy())
+        self.writer.add_scalar("EER", logs["EER"])
 
         return logs
 
@@ -122,15 +119,12 @@ class Trainer(BaseTrainer):
         логируются гистограммами: их перекрытие и есть то, что измеряет EER,
         так что график показывает, насколько классы разделимы.
         """
-        if mode == "train" or self.writer is None:
+        if mode == "train":
             # на train-партиции ничего тяжёлого: метод вызывается каждые
             # log_step шагов, а картинки и гистограммы замедляют обучение
             return
 
         scores, labels = self._collected_scores()
-        if scores is None:
-            return
-
         bonafide_scores = scores[labels == 1]
         spoof_scores = scores[labels == 0]
         if bonafide_scores.numel() > 0:
@@ -151,9 +145,6 @@ class Trainer(BaseTrainer):
 
     def _collected_scores(self):
         """
-        Склеивает скоры и метки, накопленные за эпоху; (None, None), если
-        накопить ничего не успели.
+        Склеивает скоры и метки, накопленные за эпоху.
         """
-        if not self._epoch_scores:
-            return None, None
         return torch.cat(self._epoch_scores), torch.cat(self._epoch_labels)

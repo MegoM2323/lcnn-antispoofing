@@ -67,22 +67,9 @@ def load_checkpoint_config(checkpoint: Path) -> DictConfig:
     """
     sidecar = checkpoint.parent / "config.yaml"
     if sidecar.exists():
-        print(f"input pipeline taken from {sidecar}")
         return OmegaConf.load(sidecar)
 
-    try:
-        stored = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    except (OSError, RuntimeError) as e:
-        raise SystemExit(f"Cannot read the checkpoint '{checkpoint}': {e}")
-
-    config = stored.get("config") if isinstance(stored, dict) else None
-    if config is None:
-        raise SystemExit(
-            f"Neither '{sidecar}' nor the checkpoint itself stores a config, "
-            "so the front-end of the training run is unknown."
-        )
-    print(f"input pipeline taken from the config stored in {checkpoint}")
-    return config
+    return torch.load(checkpoint, map_location="cpu", weights_only=False)["config"]
 
 
 def build_run_config(
@@ -97,12 +84,6 @@ def build_run_config(
     transforms = saved_config.get("transforms", {})
     batch_transforms = transforms.get("batch_transforms", {})
     instance_transforms = transforms.get("instance_transforms", {})
-
-    if batch_transforms.get("inference") is None:
-        raise SystemExit(
-            "The checkpoint config defines no inference front-end, the input "
-            "of the model cannot be reproduced."
-        )
 
     # запуски, сделанные до отказа от эмбеддинг-головы, хранят флаг, который
     # модель больше не принимает, поэтому сохранённый конфиг копируется без него
@@ -191,19 +172,16 @@ def build_submission(scores_path: Path, protocol_path: str, output: Path) -> int
     # одинаковые файлы
     write_score_csv(output, {entry.utt_id: scores[entry.utt_id] for entry in entries})
 
-    print(f"\nsubmission written to {output.resolve()}")
+    print(f"submission written to {output.resolve()}")
     return 0
 
 
 def main() -> int:
     args = parse_args()
-    if not args.checkpoint.exists():
-        raise SystemExit(f"Checkpoint '{args.checkpoint}' does not exist")
 
     device = args.device
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"device: {device}")
 
     config = build_run_config(
         load_checkpoint_config(args.checkpoint),

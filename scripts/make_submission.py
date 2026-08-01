@@ -32,12 +32,6 @@ DEFAULT_PROTOCOL = os.environ.get(
 )
 DEFAULT_SUBMISSION_NAME = "mppanin.csv"  # должно совпадать с университетским логином
 
-# пороги оценки из условия задания (EER в %, шкала 0-100)
-EER_ZERO_GRADE = 10.9
-EER_FULL_GRADE = 5.3
-MAX_GRADE = 10.0
-MIN_LINEAR_GRADE = 2.0
-
 
 def read_scores(scores_path: str | Path) -> tuple[dict[str, float], list[str]]:
     """
@@ -81,10 +75,7 @@ def load_score_file(path: str | Path) -> dict[str, float]:
     """Читает набор скоров, сразу отвергая битый файл."""
     scores, errors = read_scores(path)
     if errors:
-        listed = "\n".join(f"  - {error}" for error in errors[:10])
-        raise ValueError(f"'{path}' is malformed:\n{listed}")
-    if not scores:
-        raise ValueError(f"'{path}' holds no scores")
+        raise ValueError(f"'{path}' is malformed: {errors[0]}")
     return scores
 
 
@@ -102,38 +93,24 @@ def write_score_csv(path: str | Path, scores: Mapping[str, float]) -> None:
             writer.writerow([utt_id, repr(float(score))])
 
 
-def compute_grade(eer: float) -> float:
-    """Ожидаемый балл за качество из [0, 10] для заданного EER в процентах."""
-    if eer > EER_ZERO_GRADE:
-        return 0.0
-    if eer < EER_FULL_GRADE:
-        return MAX_GRADE
-    return MIN_LINEAR_GRADE + (EER_ZERO_GRADE - eer) * (
-        (MAX_GRADE - MIN_LINEAR_GRADE) / (EER_ZERO_GRADE - EER_FULL_GRADE)
-    )
-
-
 def validate_submission(
     scores_path: str | Path, protocol_path: str | Path
 ) -> float | None:
     """
     Прогоняет все проверки, на которых споткнулся бы проверяющий скрипт, и
-    печатает EER, ожидаемый балл и EER каждого алгоритма атаки (каждая атака
+    печатает EER вместе с EER каждого алгоритма атаки (каждая атака
     сравнивается со всем пулом bonafide, как в официальном плане оценки).
     Возвращает None, если файл непроверяем; найденные проблемы печатаются.
     """
-    try:
-        entries = read_protocol_entries(protocol_path)
-        scores, errors = read_scores(scores_path)
-    except (OSError, ValueError) as e:
-        raise SystemExit(f"Cannot read the protocol or the scores: {e}")
+    entries = read_protocol_entries(protocol_path)
+    scores, errors = read_scores(scores_path)
 
     missing = [entry.utt_id for entry in entries if entry.utt_id not in scores]
     if missing:
         errors.append(f"{len(missing)} protocol ids are missing, e.g. {missing[:5]}")
 
     if errors:
-        print(f"\n{scores_path} is INVALID:")
+        print(f"{scores_path} is INVALID:")
         for error in errors[:20]:
             print(f"  - {error}")
         return None
@@ -143,13 +120,12 @@ def validate_submission(
     labels = [entry.label for entry in entries]
     eer = compute_eer_percent([scores[entry.utt_id] for entry in entries], labels)
 
-    print(f"\n{len(entries)} trials, {sum(labels)} of them bonafide")
-    print(f"EER: {eer:.4f}%")
-    print(f"expected performance grade: {compute_grade(eer):.2f} / 10")
-
-    print(f"\n{'attack':<8}{'trials':>8}{'EER':>12}")
-    for stats in sorted(attack_breakdown(scores, entries), key=lambda st: -st.eer):
-        print(f"{stats.attack_id:<8}{stats.n_trials:>8}{stats.eer:>11.4f}%")
+    by_attack = ", ".join(
+        f"{stats.attack_id} {stats.eer:.2f}%"
+        for stats in sorted(attack_breakdown(scores, entries), key=lambda st: -st.eer)
+    )
+    print(f"{scores_path}: {len(entries)} trials, EER {eer:.4f}%")
+    print(f"EER by attack: {by_attack}")
 
     return eer
 
@@ -171,13 +147,8 @@ def main() -> int:
     if validate_submission(args.scores, DEFAULT_PROTOCOL) is None:
         return 1
 
-    try:
-        shutil.copyfile(args.scores, args.output)
-    except OSError as e:
-        print(f"Cannot write the submission file '{args.output}': {e}")
-        return 1
-
-    print(f"\nsubmission saved to {args.output.resolve()}")
+    shutil.copyfile(args.scores, args.output)
+    print(f"submission saved to {args.output.resolve()}")
     return 0
 
 

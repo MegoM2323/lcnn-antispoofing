@@ -30,9 +30,6 @@ def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
     audio = audio.reshape(-1)
 
     length = audio.shape[0]
-    if length == 0:
-        raise ValueError("Cannot collate an empty waveform")
-
     if length < max_len:
         audio = torch.tile(audio, (max_len // length + 1,))
 

@@ -10,9 +10,6 @@ import torchaudio
 import torchaudio.functional as F
 from torch import nn
 
-CROP_MODES = ("first", "random")
-PAD_MODES = ("repeat", "zero")
-
 EPS = 1e-8  # аддитивная константа под логарифмами
 DELTA_WIN_LENGTH = 5  # окно фильтра delta/delta-delta
 
@@ -45,14 +42,6 @@ def fix_frames(
     if crop == "random":
         start = int(torch.randint(0, n_cur - n_frames + 1, (1,)).item())
     return spec[..., start : start + n_frames]
-
-
-def validate_frame_modes(crop: str, pad_mode: str) -> None:
-    # опечатка здесь не ломает запуск, а молча меняет вход модели
-    if crop not in CROP_MODES:
-        raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
-    if pad_mode not in PAD_MODES:
-        raise ValueError(f"pad_mode must be one of {PAD_MODES}, got {pad_mode}")
 
 
 def autocast_dtype(device_type: str) -> torch.dtype | None:
@@ -89,7 +78,6 @@ class LogSpectrogram(nn.Module):
     ) -> None:
         super().__init__()
 
-        validate_frame_modes(crop, pad_mode)
         window_fns = {
             "blackman": torch.blackman_window,
             "hann": torch.hann_window,
@@ -156,8 +144,6 @@ class LFCC(nn.Module):
         pad_mode: str = "repeat",
     ) -> None:
         super().__init__()
-
-        validate_frame_modes(crop, pad_mode)
 
         self.n_frames = n_frames
         self.crop = crop

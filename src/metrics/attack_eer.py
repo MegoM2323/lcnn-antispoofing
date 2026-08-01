@@ -41,30 +41,9 @@ def ordered_scores(
     Раскладывает скоры в порядке протокола вместе с отвечающими им метками
     (1 = bonafide).
     """
-    missing = [entry.utt_id for entry in entries if entry.utt_id not in scores]
-    if missing:
-        raise ValueError(
-            f"{len(missing)} of {len(entries)} trials have no score, "
-            f"e.g. {missing[:5]}"
-        )
-
     values = np.array([scores[entry.utt_id] for entry in entries], dtype=np.float64)
     labels = np.array([entry.label for entry in entries], dtype=np.float64)
     return values, labels
-
-
-def pooled_eer(
-    scores: Mapping[str, float], entries: Sequence[ProtocolEntry]
-) -> float | None:
-    """
-    EER по набору испытаний; None, если один из двух классов не представлен
-    и метрика не определена.
-    """
-    values, labels = ordered_scores(scores, entries)
-    bonafide_count = int(labels.sum())
-    if labels.size == 0 or bonafide_count in (0, labels.size):
-        return None
-    return compute_eer_percent(values, labels)
 
 
 def attack_breakdown(
@@ -73,12 +52,8 @@ def attack_breakdown(
     """
     Считает EER каждого алгоритма атаки против пула bonafide и возвращает по
     одному AttackStats на атаку, отсортированных по идентификатору атаки.
-    Список пуст, если среди испытаний нет ни одной записи bonafide, поскольку
-    без них EER не определён ни для одной атаки.
     """
     bonafide = [entry for entry in entries if entry.label == 1]
-    if not bonafide:
-        return []
 
     attacks: dict[str, list[ProtocolEntry]] = {}
     for entry in entries:

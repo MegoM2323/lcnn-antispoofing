@@ -44,25 +44,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    systems = []
-    for path in args.scores:
-        try:
-            systems.append(load_score_file(path))
-        except (OSError, ValueError) as e:
-            raise SystemExit(f"Cannot read '{path}': {e}")
+    systems = [load_score_file(path) for path in args.scores]
+    write_score_csv(args.output, fuse_scores(systems))
 
-    try:
-        fused = fuse_scores(systems)
-    except ValueError as e:
-        raise SystemExit(f"Cannot fuse the scores: {e}")
+    if validate_submission(args.output, DEFAULT_PROTOCOL) is None:
+        return 1
 
-    try:
-        write_score_csv(args.output, fused)
-    except OSError as e:
-        raise SystemExit(f"Cannot write '{args.output}': {e}")
     print(f"fusion of {len(systems)} systems saved to {args.output.resolve()}")
-
-    return 0 if validate_submission(args.output, DEFAULT_PROTOCOL) is not None else 1
+    return 0
 
 
 if __name__ == "__main__":
