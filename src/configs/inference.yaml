@@ -5,14 +5,13 @@ defaults:
   - dataloader: asvspoof
   - transforms: stft
   - _self_
-# должно совпадать с длиной, на которой обучалась модель (см. lcnn.yaml)
 collate_max_len: 77870
 inferencer:
   device_tensors: ["data_object", "labels"] # какие тензоры класть на устройство (например, GPU)
   device: auto # имя устройства или "auto"
-  use_amp: False # скоры посылки считаются в fp32, bf16 меняет только скорость
+  use_amp: False
   amp_dtype: bfloat16
-  save_path: "eval" # предсказания пишутся в data/saved/${inferencer.save_path}
+  save_path: "eval" # любое имя, можно назвать по датасету
   seed: 1
-  cudnn_benchmark: False # см. trainer.cudnn_benchmark в lcnn.yaml
+  cudnn_benchmark: False
   from_pretrained: "saved/lcnn_stft_600f/model_best.pth" # путь к обученной модели

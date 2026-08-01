@@ -1,14 +1,3 @@
-"""
-Чтение, проверка и запись csv с эвалюационными скорами.
-
-Проверки повторяют 'grading.py': проверяющий скрипт строит из csv словарь
-и затем ищет в нём *каждую* запись протокола, поэтому пропущенная или битая
-строка это KeyError у него и ноль за работу. Функции чтения и записи общие
-с двумя другими скриптами.
-
-    python3 scripts/make_submission.py data/saved/lfcc21/eval_scores.csv -o mppanin.csv
-"""
-
 import argparse
 import csv
 import math
@@ -25,19 +14,14 @@ from src.metrics.attack_eer import attack_breakdown  # noqa: E402
 from src.metrics.eer_utils import compute_eer_percent  # noqa: E402
 from src.utils.protocol import read_protocol_entries  # noqa: E402
 
-# протокол корпуса LA, разложенного так, как описано в README
 EVAL_PROTOCOL = "ASVspoof2019_LA_cm_protocols/ASVspoof2019.LA.cm.eval.trl.txt"
 DEFAULT_PROTOCOL = os.environ.get(
     "ASVSPOOF_EVAL_PROTOCOL", str(PROJECT_ROOT / "data" / "LA" / EVAL_PROTOCOL)
 )
-DEFAULT_SUBMISSION_NAME = "mppanin.csv"  # должно совпадать с университетским логином
+DEFAULT_SUBMISSION_NAME = "mppanin.csv"
 
 
 def read_scores(scores_path: str | Path) -> tuple[dict[str, float], list[str]]:
-    """
-    Читает csv со скорами модели и возвращает их вместе со списком найденных
-    проблем. Пустые строки пропускаются, проверяющий скрипт тоже их пропускает.
-    """
     scores: dict[str, float] = {}
     errors: list[str] = []
     with Path(scores_path).open("r", newline="") as file:
@@ -50,8 +34,6 @@ def read_scores(scores_path: str | Path) -> tuple[dict[str, float], list[str]]:
 
             key, raw_score = row
             if key != key.strip():
-                # проверяющий скрипт ищет идентификатор как есть, поэтому
-                # лишние пробелы дают у него KeyError: чинить их молча нельзя
                 errors.append(f"line {line}: id '{key}' is padded")
                 continue
 
@@ -72,7 +54,6 @@ def read_scores(scores_path: str | Path) -> tuple[dict[str, float], list[str]]:
 
 
 def load_score_file(path: str | Path) -> dict[str, float]:
-    """Читает набор скоров, сразу отвергая битый файл."""
     scores, errors = read_scores(path)
     if errors:
         raise ValueError(f"'{path}' is malformed: {errors[0]}")
@@ -80,11 +61,6 @@ def load_score_file(path: str | Path) -> dict[str, float]:
 
 
 def write_score_csv(path: str | Path, scores: Mapping[str, float]) -> None:
-    """
-    Пишет скоры в формате посылки. Вместо фиксированного формата используется
-    'repr': округление создаёт совпадающие скоры у записей, которые модель
-    различила, а совпадения сдвигают EER.
-    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as file:
@@ -96,12 +72,6 @@ def write_score_csv(path: str | Path, scores: Mapping[str, float]) -> None:
 def validate_submission(
     scores_path: str | Path, protocol_path: str | Path
 ) -> float | None:
-    """
-    Прогоняет все проверки, на которых споткнулся бы проверяющий скрипт, и
-    печатает EER вместе с EER каждого алгоритма атаки (каждая атака
-    сравнивается со всем пулом bonafide, как в официальном плане оценки).
-    Возвращает None, если файл непроверяем; найденные проблемы печатаются.
-    """
     entries = read_protocol_entries(protocol_path)
     scores, errors = read_scores(scores_path)
 
@@ -115,8 +85,6 @@ def validate_submission(
             print(f"  - {error}")
         return None
 
-    # тот же расчёт, что в grading.py: официальный compute_eer по скорам,
-    # упорядоченным по протоколу
     labels = [entry.label for entry in entries]
     eer = compute_eer_percent([scores[entry.utt_id] for entry in entries], labels)
 

@@ -1,8 +1,3 @@
-"""
-Фронт-энды, превращающие батч сигналов во вход модели: логарифмическая
-STFT-спектрограмма и LFCC, оба считаются на устройстве батча.
-"""
-
 import math
 
 import torch
@@ -10,22 +5,13 @@ import torchaudio
 import torchaudio.functional as F
 from torch import nn
 
-EPS = 1e-8  # аддитивная константа под логарифмами
-DELTA_WIN_LENGTH = 5  # окно фильтра delta/delta-delta
+EPS = 1e-8
+DELTA_WIN_LENGTH = 5
 
 
 def fix_frames(
     spec: torch.Tensor, n_frames: int, crop: str, pad_mode: str
 ) -> torch.Tensor:
-    """
-    Приводит последовательность признаков к фиксированному числу фреймов.
-
-    Всё, что короче n_frames, дополняется, всё, что длиннее, обрезается.
-    В работах по ASVspoof вместо дополнения нулями принято циклически повторять
-    запись: тишина не несёт следов спуфинга и смещает сеть. Параметр crop это
-    "first" (первые фреймы, режим инференса) или "random" (аугментация на
-    обучении), pad_mode это "repeat" или "zero".
-    """
     n_cur = spec.shape[-1]
     if n_cur == n_frames:
         return spec
@@ -45,25 +31,12 @@ def fix_frames(
 
 
 def autocast_dtype(device_type: str) -> torch.dtype | None:
-    """
-    Тип данных, которого ждёт окружающая область autocast; None, если он
-    выключен.
-    """
     if torch.is_autocast_enabled(device_type):
         return torch.get_autocast_dtype(device_type)
     return None
 
 
 class LogSpectrogram(nn.Module):
-    """
-    Фронт-энд системы FFT-LCNN: логарифм спектра мощности.
-
-    Повторяет решение STC для ASVspoof2019 (arXiv:1904.05576, разд. 2.1):
-    1724-точечное FFT с окном Блэкмана, 863 частотных бина, без CMVN
-    (нормировка по среднему и дисперсии в исходной работе ухудшала EER) и
-    только первые 600 фреймов на вход сети.
-    """
-
     def __init__(
         self,
         n_fft: int = 1724,
@@ -98,13 +71,8 @@ class LogSpectrogram(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Превращает батч сигналов (B, T) в (B, n_freqs, n_frames).
-        """
         out_dtype = autocast_dtype(x.device.type)
 
-        # в bf16/fp16 STFT численно неустойчиво (и поддержано не полностью),
-        # поэтому фронт-энд всегда считается в float32 независимо от autocast
         with torch.autocast(device_type=x.device.type, enabled=False):
             spec = self.spectrogram(x.float())
             spec = torch.log(spec + self.eps)
@@ -116,16 +84,6 @@ class LogSpectrogram(nn.Module):
 
 
 class LFCC(nn.Module):
-    """
-    Фронт-энд на кепстральных коэффициентах в линейной шкале частот.
-
-    Повторяет baseline-рецепт ASVspoof2019 в изложении arXiv:2103.11326
-    (разд. 3.1): окно 20 мс с шагом 10 мс, 512-точечное FFT, 20 равномерно
-    расставленных треугольных фильтров, нулевой кепстральный коэффициент
-    заменён логарифмом энергии спектра, плюс признаки delta и delta-delta
-    (всего 60 измерений).
-    """
-
     fbanks: torch.Tensor
     dct_mat: torch.Tensor
 
@@ -164,19 +122,16 @@ class LFCC(nn.Module):
             n_filter=n_filter,
             sample_rate=sample_rate,
         )
-        self.register_buffer("fbanks", fbanks)  # (n_freqs, n_filter)
+        self.register_buffer("fbanks", fbanks)
         self.register_buffer("dct_mat", F.create_dct(n_lfcc, n_filter, norm="ortho"))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Превращает батч сигналов (B, T) в (B, n_features, n_frames).
-        """
         out_dtype = autocast_dtype(x.device.type)
 
         with torch.autocast(device_type=x.device.type, enabled=False):
-            spec = self.spectrogram(x.float())  # (B, n_freqs, T')
+            spec = self.spectrogram(x.float())
             filtered = torch.log(spec.transpose(-1, -2) @ self.fbanks + EPS)
-            lfcc = filtered @ self.dct_mat  # (B, T', n_lfcc)
+            lfcc = filtered @ self.dct_mat
             lfcc = lfcc.transpose(-1, -2)
 
             if self.with_energy:

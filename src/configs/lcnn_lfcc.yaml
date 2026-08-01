@@ -3,7 +3,6 @@ defaults:
   - override /transforms: lfcc
   - _self_
 model:
-  # фронт-энд LFCC: 60 коэффициентов (20 статических + delta + delta-delta) x 750 фреймов
   in_freq: 60
   in_frames: 750
 writer:

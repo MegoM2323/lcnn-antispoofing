@@ -1,5 +1,3 @@
-# фронт-энд FFT-LCNN из arXiv:1904.05576: 1724-точечное FFT, окно Блэкмана,
-# 863 частотных бина, первые 600 фреймов, без CMVN.
 train:
   data_object: # имя тензора, к которому применяется трансформ
     _target_: torch.nn.Sequential # чтобы применить несколько трансформов подряд
@@ -12,7 +10,7 @@ train:
         power: 2.0
         eps: 1e-8
         n_frames: 600
-        crop: random # случайный кусок длинной записи работает как аугментация
+        crop: random
         pad_mode: repeat
 inference:
   data_object:
@@ -26,5 +24,5 @@ inference:
         power: 2.0
         eps: 1e-8
         n_frames: 600
-        crop: first # цитата из статьи: "only the first 600 features for each file were used"
+        crop: first
         pad_mode: repeat

@@ -3,24 +3,22 @@ defaults:
   - override /datasets: one_batch_test
   - _self_
 model:
-  dropout: 0.0 # заученный батч должен давать почти нулевой лосс, а не шумный
+  dropout: 0.0
 dataloader:
-  # проверка идёт на 64 фиксированных записях, воркеры тут не нужны
   num_workers: 2
   persistent_workers: False
-  # fp32 при входе 863x600 не помещается в 12 ГБ с батчем 32 по умолчанию
   batch_size: 16
 lr_scheduler:
-  step_size: 1000000 # постоянный lr: модель должна переобучиться, а не сойтись
+  step_size: 1000000
 loss_function:
-  class_weights: null # подвыборка крошечная, перевзвешивание только добавит шума
+  class_weights: null
 writer:
   run_name: "one_batch_test"
   mode: "offline"
 trainer:
   log_step: 5
   n_epochs: 50
-  use_amp: False # fp32, чтобы провал проверки означал сломанный конвейер, а не bf16
-  override: True # проверка перезапускается часто
+  use_amp: False
+  override: True # если True, предыдущий запуск с тем же именем будет перезаписан
   early_stop: 50
   save_period: 50

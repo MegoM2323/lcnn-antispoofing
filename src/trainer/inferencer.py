@@ -9,17 +9,6 @@ from src.trainer.base_trainer import BaseTrainer
 
 
 class Inferencer(BaseTrainer):
-    """
-    Инференсер: то же, что тренер, но для инференса.
-
-    Класс обрабатывает данные без оптимизаторов, логгеров и прочего. Нужен,
-    чтобы оценить модель на датасете, сохранить предсказания и так далее.
-
-    Предсказания сохраняются в формате, который ждёт официальный проверяющий
-    скрипт: csv без заголовка со строками "utterance_id,score", где скор это
-    логарифм отношения правдоподобий класса bonafide.
-    """
-
     def __init__(
         self,
         model,
@@ -31,22 +20,6 @@ class Inferencer(BaseTrainer):
         batch_transforms=None,
         skip_model_load=False,
     ):
-        """
-        Аргументы:
-            model (nn.Module): модель PyTorch.
-            config (DictConfig): конфиг запуска, содержащий конфиг
-                инференсера.
-            device (str): устройство для тензоров и модели.
-            dataloaders (dict[DataLoader]): даталоадеры, которые надо
-                прогнать.
-            save_path (Path): каталог, куда пишутся предсказания.
-            metrics (dict | None): metrics[inference], каждая из них
-                экземпляр src.metrics.BaseMetric.
-            batch_transforms (dict[nn.Module] | None): трансформы, которые
-                применяются ко всему батчу, в зависимости от имени тензора.
-            skip_model_load (bool): если False, в модель загружается чекпоинт
-                из config.inferencer.from_pretrained.
-        """
         assert (
             skip_model_load or config.inferencer.get("from_pretrained") is not None
         ), "Provide checkpoint or set skip_model_load=True"
@@ -73,7 +46,6 @@ class Inferencer(BaseTrainer):
 
         self._setup_amp()
 
-        # буферы с предсказаниями текущей партиции
         self._utt_ids = []
         self._scores = []
         self._labels = []
@@ -82,24 +54,14 @@ class Inferencer(BaseTrainer):
             self._from_pretrained(config.inferencer.get("from_pretrained"))
 
     def run_inference(self):
-        """
-        Прогоняет инференс на каждой партиции и возвращает её логи по имени
-        партиции.
-        """
         return {
             part: self._inference_part(part, dataloader)
             for part, dataloader in self.evaluation_dataloaders.items()
         }
 
     def process_batch(self, batch, metrics):
-        """
-        Прогоняет батч через модель, считает метрики и накапливает
-        предсказания. На диск всё пишется один раз на партицию в методе
-        '_inference_part': отдельный файл на запись означал бы 71237 файлов
-        для эвалюационной партиции.
-        """
         batch = self.move_batch_to_device(batch)
-        batch = self.transform_batch(batch)  # трансформы на устройстве, так быстрее
+        batch = self.transform_batch(batch)
 
         with self._autocast():
             outputs = self.model(**batch)
@@ -116,10 +78,6 @@ class Inferencer(BaseTrainer):
         return batch
 
     def _inference_part(self, part, dataloader):
-        """
-        Прогоняет инференс на заданной партиции, сохраняет предсказания и
-        считает EER, если доступны истинные метки.
-        """
         self.is_train = False
         self.model.eval()
 
@@ -149,10 +107,6 @@ class Inferencer(BaseTrainer):
         return logs
 
     def _save_scores(self, part, scores):
-        """
-        Пишет '{part}_scores.csv' в формате посылки: без заголовка,
-        "utterance_id,score", по строке на каждую запись партиции.
-        """
         self.save_path.mkdir(exist_ok=True, parents=True)
         with (self.save_path / f"{part}_scores.csv").open("w", newline="") as file:
             writer = csv.writer(file)

@@ -1,15 +1,3 @@
-"""
-Объединение скоров нескольких прогонов в один csv посылки.
-
-Объединение на уровне скоров систем, которые смотрят на сигнал по-разному
-(другой фронт-энд, другая эпоха), не выходит за рамки задания: каждый участник
-по-прежнему LCNN, складываются только их скоры. Почему скоры нормируются перед
-усреднением, написано в src/metrics/score_fusion.py.
-
-    python3 scripts/fuse_scores.py data/saved/{lfcc21,stft15}/eval_scores.csv \\
-        -o mppanin.csv
-"""
-
 import argparse
 import sys
 from pathlib import Path

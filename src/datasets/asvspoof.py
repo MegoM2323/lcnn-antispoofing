@@ -1,8 +1,3 @@
-"""
-Индекс партиций ASVspoof2019 LA, собранный по официальным CM-протоколам,
-вместе с чтением и обрезкой отдельной записи.
-"""
-
 import logging
 import random
 from pathlib import Path
@@ -34,16 +29,6 @@ LABELS = {"bonafide": 1, "spoof": 0}
 
 
 class ASVspoofDataset(BaseDataset):
-    """
-    Датасет ASVspoof2019 Logical Access (LA) для голосового антиспуфинга.
-
-    Каждый элемент это моно-запись 16 кГц с бинарной меткой: 1 для bonafide
-    (настоящая речь) и 0 для подделки.
-
-    Индекс строится по официальным файлам CM-протокола и кэшируется на диск
-    в виде JSON, чтобы не разбирать протокол при каждом запуске.
-    """
-
     def __init__(
         self,
         part: str,
@@ -54,23 +39,6 @@ class ASVspoofDataset(BaseDataset):
         *args,
         **kwargs,
     ):
-        """
-        Аргументы:
-            part (str): партиция датасета, одна из "train", "dev", "eval".
-            data_dir (str): путь к корню LA, то есть к каталогу, в котором
-                лежат ASVspoof2019_LA_train, ASVspoof2019_LA_cm_protocols
-                и остальное.
-            max_len (int | None): если не None, записи длиннее max_len
-                отсчётов обрезаются до max_len прямо при загрузке. Это
-                экономит память в воркерах даталоадера, окончательная длина
-                задаётся в collate_fn.
-            random_crop (bool | None): если True, длинная запись обрезается
-                со случайной позиции, иначе берутся первые max_len отсчётов.
-                None означает True для партиции "train" и False для
-                остальных.
-            index_dir (str | None): каталог для кэша индекса. По умолчанию
-                ROOT_PATH / "data" / "index".
-        """
         self.part = part
         self.data_dir = Path(data_dir).absolute().resolve()
         self.max_len = max_len
@@ -91,12 +59,6 @@ class ASVspoofDataset(BaseDataset):
         super().__init__(index, *args, **kwargs)
 
     def _load_cached_index(self, index_path: Path) -> list[dict] | None:
-        """
-        Читает кэш индекса, если он не был собран для другого корпуса: в кэше
-        лежат абсолютные пути, поэтому при смене ASVSPOOF_DIR данные молча
-        поехали бы из устаревшего индекса. None означает, что индекс надо
-        построить заново.
-        """
         if not index_path.exists():
             return None
 
@@ -107,12 +69,6 @@ class ASVspoofDataset(BaseDataset):
         return cached["index"]
 
     def _create_index(self, index_path: Path) -> list[dict]:
-        """
-        Разбирает CM-протокол партиции и строит индекс датасета.
-
-        Каждый элемент получает путь к аудио, бинарную метку и метаданные
-        записи; результат кэшируется в 'index_path'.
-        """
         logger.info(f"Creating ASVspoof2019 LA index for '{self.part}' partition")
 
         index: list[dict] = []
@@ -125,9 +81,6 @@ class ASVspoofDataset(BaseDataset):
                 speaker_id, utt_id, _, attack_id, label = fields
                 audio_path = self.audio_dir / f"{utt_id}.flac"
                 if self.part == "eval" and not audio_path.exists():
-                    # проверяющий скрипт ищет в посылке каждый идентификатор
-                    # из протокола, поэтому один пропущенный файл это KeyError
-                    # и отклонённая посылка
                     raise FileNotFoundError(
                         f"Audio file {audio_path} is missing, but it is listed "
                         f"at line {line_number} of {self.protocol_path}"
@@ -149,10 +102,6 @@ class ASVspoofDataset(BaseDataset):
         return index
 
     def __getitem__(self, ind: int) -> dict:
-        """
-        Загружает запись и объединяет её с метаданными в словарь с аудио
-        ("data_object"), меткой ("labels") и идентификатором ("utt_id").
-        """
         data_dict = self._index[ind]
 
         instance_data = {
@@ -164,14 +113,6 @@ class ASVspoofDataset(BaseDataset):
         return self.preprocess_data(instance_data)
 
     def load_object(self, path: str) -> torch.Tensor:
-        """
-        Загружает моно-сигнал с диска, обрезая его до max_len отсчётов.
-
-        Начиная с torchaudio 2.9 функция torchaudio.load требует бэкенд
-        torchcodec, поэтому здесь напрямую используется soundfile. Чтение
-        только нужного куска файла держит потребление памяти воркерами
-        низким.
-        """
         with sf.SoundFile(path) as audio_file:
             offset = self._get_offset(audio_file.frames)
             if offset > 0:
@@ -182,9 +123,6 @@ class ASVspoofDataset(BaseDataset):
         return torch.from_numpy(audio).T
 
     def _get_offset(self, frames: int) -> int:
-        """
-        Позиция начала обрезки для записи длиной 'frames' отсчётов.
-        """
         if self.max_len is None or frames <= self.max_len or not self.random_crop:
             return 0
         return random.randint(0, frames - self.max_len)
