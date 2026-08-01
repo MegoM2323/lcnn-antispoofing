@@ -14,8 +14,6 @@ train:
         n_frames: 600
         crop: random # random slice of a long utterance acts as augmentation
         pad_mode: repeat
-      # augmentation is off by default: add src.transforms.SpecAugment here to
-      # enable it, see src/transforms/augment.py for the parameters
 inference:
   data_object:
     _target_: torch.nn.Sequential

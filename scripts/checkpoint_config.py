@@ -23,7 +23,7 @@ sys.path.append(str(PROJECT_ROOT))
 from src.datasets.collate import DEFAULT_MAX_LEN  # noqa: E402
 from src.trainer.config_check import (  # noqa: E402
     config_mismatches,
-    format_mismatch_warning,
+    format_mismatch_note,
 )
 
 CONFIG_DIR = PROJECT_ROOT / "src" / "configs"
@@ -73,12 +73,14 @@ def report_config_drift(saved_config: DictConfig, checkpoint: Path) -> None:
     Compare the config of the checkpoint with the current configs of the
     project and report every difference.
 
-    The scoring run uses the checkpoint config regardless: the warning is there
-    to show that the repository has moved away from the trained model.
+    The scoring run uses the checkpoint config regardless, so this is a note
+    and not a warning: it only shows how far the project configs have moved
+    away from the trained model. The LFCC systems of the final result always
+    hit this branch, since 'inference.yaml' describes the spectrogram one.
 
     Args:
         saved_config (DictConfig): config of the training run.
-        checkpoint (Path): path of the checkpoint, for the text of the warning.
+        checkpoint (Path): path of the checkpoint, for the text of the note.
     """
     try:
         with initialize_config_dir(version_base=None, config_dir=str(CONFIG_DIR)):
@@ -89,8 +91,7 @@ def report_config_drift(saved_config: DictConfig, checkpoint: Path) -> None:
 
     mismatches = config_mismatches(saved_config, current_config)
     if mismatches:
-        print(format_mismatch_warning(mismatches, str(checkpoint)))
-        print("The checkpoint config is used, the current one is ignored.")
+        print(format_mismatch_note(mismatches, str(checkpoint)))
     else:
         print("Checkpoint config matches the current configs of the project.")
 

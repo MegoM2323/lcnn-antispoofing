@@ -14,6 +14,7 @@ reported.
 """
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
@@ -28,7 +29,7 @@ FRONTEND_PATH = ("transforms", "batch_transforms", "inference")
 ABSENT = "<absent>"
 
 
-def to_plain(node):
+def to_plain(node: Any) -> Any:
     """
     Convert an omegaconf node into plain python containers.
 
@@ -48,7 +49,7 @@ def to_plain(node):
         return OmegaConf.to_container(node, resolve=False)
 
 
-def select(config, path):
+def select(config: Mapping | None, path: tuple[str, ...]) -> Any:
     """
     Follow a chain of keys in a config, tolerating missing intermediate nodes.
 
@@ -66,7 +67,7 @@ def select(config, path):
     return node
 
 
-def collate_max_len(config):
+def collate_max_len(config: Mapping | None) -> tuple[int, bool]:
     """
     Number of samples every waveform of a batch is brought to.
 
@@ -84,7 +85,7 @@ def collate_max_len(config):
     return int(value), False
 
 
-def frontend_params(config):
+def frontend_params(config: Mapping | None) -> dict:
     """
     Collect the front-end parameters of the inference batch transform.
 
@@ -102,7 +103,7 @@ def frontend_params(config):
     return params
 
 
-def _is_container(value):
+def _is_container(value: Any) -> bool:
     """
     Check whether a config value has children to descend into. Strings are
     scalars here: 'window: blackman' and 'crop: first' are front-end values.
@@ -117,7 +118,7 @@ def _is_container(value):
     return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
 
 
-def _collect_params(node, params):
+def _collect_params(node: Any, params: dict) -> None:
     """
     Depth-first search of FRONTEND_KEYS in a transform definition.
 
@@ -136,7 +137,7 @@ def _collect_params(node, params):
             _collect_params(item, params)
 
 
-def _describe(value):
+def _describe(value: Any) -> str:
     """
     Format a config value for the report.
 
@@ -148,7 +149,7 @@ def _describe(value):
     return ABSENT if value is None else str(value)
 
 
-def _diff_mappings(saved, current, prefix):
+def _diff_mappings(saved: Mapping, current: Mapping, prefix: str) -> list[str]:
     """
     Compare two flat mappings key by key.
 
@@ -159,7 +160,7 @@ def _diff_mappings(saved, current, prefix):
     Returns:
         mismatches (list[str]): one line per differing key.
     """
-    mismatches = []
+    mismatches: list[str] = []
     for key in sorted(set(saved) | set(current)):
         if saved.get(key) != current.get(key):
             mismatches.append(
@@ -169,7 +170,9 @@ def _diff_mappings(saved, current, prefix):
     return mismatches
 
 
-def config_mismatches(saved_config, current_config):
+def config_mismatches(
+    saved_config: Mapping | None, current_config: Mapping | None
+) -> list[str]:
     """
     Compare the parts of the two configs that define the input of the model.
 
@@ -183,7 +186,7 @@ def config_mismatches(saved_config, current_config):
     if saved_config is None or current_config is None:
         return []
 
-    mismatches = []
+    mismatches: list[str] = []
 
     saved_len, saved_is_default = collate_max_len(saved_config)
     current_len, current_is_default = collate_max_len(current_config)
@@ -214,7 +217,7 @@ def config_mismatches(saved_config, current_config):
     return mismatches
 
 
-def format_mismatch_warning(mismatches, checkpoint_path):
+def format_mismatch_warning(mismatches: list[str], checkpoint_path: str) -> str:
     """
     Build the text of the warning printed when the configs disagree.
 
@@ -228,10 +231,46 @@ def format_mismatch_warning(mismatches, checkpoint_path):
         "=" * 72 + "\nCONFIG MISMATCH: the checkpoint "
         f"'{checkpoint_path}' was trained with another input pipeline"
     )
-    body = "\n".join(f"  * {mismatch}" for mismatch in mismatches)
     footer = (
         "The weights fit a different input, so the scores are not comparable "
         "with the ones of the training run.\nAlign the config with "
         "saved/<run_name>/config.yaml before making a submission.\n" + "=" * 72
     )
-    return f"{header}\n{body}\n{footer}"
+    return f"{header}\n{_format_list(mismatches)}\n{footer}"
+
+
+def format_mismatch_note(mismatches: list[str], checkpoint_path: str) -> str:
+    """
+    Build the text printed by the scoring tools when the configs disagree.
+
+    Unlike 'format_mismatch_warning', this is not a warning: the tools that use
+    it rebuild the input pipeline from the config of the checkpoint, so the
+    differences below are informational. The message exists because the project
+    configs describe the spectrogram front-end while the final systems are
+    LFCC ones, and a scoring run of an LFCC checkpoint is the normal case.
+
+    Args:
+        mismatches (list[str]): output of 'config_mismatches'.
+        checkpoint_path (str): path of the loaded checkpoint.
+    Returns:
+        text (str): multiline note.
+    """
+    header = (
+        f"the project configs describe another front-end than '{checkpoint_path}' "
+        "was trained with:"
+    )
+    footer = (
+        "the configuration of the checkpoint is used, "
+        "so the input matches the training run."
+    )
+    return f"{header}\n{_format_list(mismatches)}\n{footer}"
+
+
+def _format_list(mismatches: list[str]) -> str:
+    """
+    Args:
+        mismatches (list[str]): output of 'config_mismatches'.
+    Returns:
+        text (str): one bullet per difference.
+    """
+    return "\n".join(f"  * {mismatch}" for mismatch in mismatches)

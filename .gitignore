@@ -100,18 +100,17 @@ ENV/
 # mypy
 .mypy_cache/
 
-# input data, saved log, checkpoints, hydra outputs
+# input data, saved log, checkpoints, hydra outputs, submissions
 data/
 input/
 saved/
 wandb/
 .cometml-runs/
 outputs/
+*.pth
+mppanin.csv
 
 # editor, os cache directory
 .vscode/
 .idea/
 __MACOSX/
-data/
-saved/
-*.pth

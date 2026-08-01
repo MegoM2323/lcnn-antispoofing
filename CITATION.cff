@@ -1,9 +1,22 @@
 cff-version: 1.2.0
-message: "If you use this template, please cite it as below."
-title: "PyTorch Project Template"
+message: "If you use this repository, please cite it as below."
+title: "Voice Anti-Spoofing: LCNN on ASVspoof2019 LA"
+abstract: >-
+  Light CNN countermeasure for the Logical Access partition of ASVspoof2019,
+  with STFT and LFCC front-ends and score-level fusion of several runs.
 authors:
-  - family-names: Grinberg
-    given-names: Petr
-    orcid: https://orcid.org/0009-0008-4480-5595
-date-released: 2024-09-01
-url: https://github.com/Blinorot/pytorch_project_template
+  - family-names: Panin
+    given-names: Mikhail
+repository-code: https://github.com/MegoM2323/lcnn-antispoofing
+license: MIT
+date-released: 2026-08-01
+references:
+  - type: software
+    title: "PyTorch Project Template"
+    authors:
+      - family-names: Grinberg
+        given-names: Petr
+        orcid: https://orcid.org/0009-0008-4480-5595
+    date-released: 2024-09-01
+    url: https://github.com/Blinorot/pytorch_project_template
+    notes: "The repository is built on this template (MIT License)."
