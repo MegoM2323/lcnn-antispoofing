@@ -170,17 +170,6 @@ python3 scripts/fuse_scores.py \
 чекпоинты одной модели ошибаются на одних и тех же записях. Основной выигрыш
 приносит второй front-end.
 
-## Тесты
-
-Фикстуры собирают во временном каталоге синтетический LA, настоящий корпус не
-нужен. Покрыты расчёт EER и разбивка по атакам, формат сабмита и фьюжн скоров,
-датасет и приведение записей к фиксированной длине, front-end, forward модели и
-загрузка чекпоинта.
-
-```bash
-python3 -m pytest tests/ -q
-black --check . && isort --profile black --check-only . && flake8 .
-```
 
 ## Структура
 
@@ -192,7 +181,6 @@ black --check . && isort --profile black --check-only . && flake8 .
 - `src/model/`, `src/loss/`, `src/metrics/`: LCNN с Max-Feature-Map,
   взвешенная кросс-энтропия, EER и фьюжн скоров;
 - `src/trainer/`, `src/logger/`, `src/utils/`: Trainer, Inferencer, Comet ML;
-- `tests/`: pytest на синтетическом корпусе.
 
 ## Credits
 

@@ -109,7 +109,6 @@ wandb/
 .cometml-runs/
 outputs/
 *.pth
-mppanin.csv
 
 # editor, os cache directory
 .vscode/
