@@ -1,11 +1,12 @@
 """
-Check that a checkpoint is loaded with the input pipeline it was trained with.
+Проверка того, что чекпоинт загружают с тем же входным конвейером, с которым
+его обучали.
 
-'load_state_dict' validates the shapes of the weights and nothing else, so a
-foreign waveform length, window or hop is accepted silently: a measurement on
-the trained model showed that a foreign 'collate_max_len' alone moves the eval
-EER by 0.33 points. Hence the front-end of the checkpoint is compared with the
-current one and every difference is reported.
+Метод 'load_state_dict' сверяет только формы весов, поэтому чужая длина
+сигнала, окно или шаг принимаются молча: замер на обученной модели показал,
+что один лишь чужой 'collate_max_len' сдвигает эвалюационный EER на 0,33
+пункта. Поэтому фронт-энд чекпоинта сравнивается с текущим, и о каждом
+расхождении сообщается.
 """
 
 from collections.abc import Mapping
@@ -13,8 +14,7 @@ from typing import Any
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-# front-end settings that change the input of the model without changing the
-# shapes of its weights
+# настройки фронт-энда, которые меняют вход модели, не меняя формы её весов
 FRONTEND_KEYS = ("n_fft", "win_length", "hop_length", "window", "n_frames", "crop")
 
 FRONTEND_PATH = ("transforms", "batch_transforms", "inference")
@@ -22,9 +22,9 @@ FRONTEND_PATH = ("transforms", "batch_transforms", "inference")
 
 def _collect(node: Any, params: dict[str, Any]) -> None:
     """
-    Depth-first search of FRONTEND_KEYS in a transform definition: the
-    front-end is a Sequential with a list of submodules, so the whole subtree
-    has to be walked. 'params' is the accumulator, modified in place.
+    Поиск FRONTEND_KEYS в описании трансформа в глубину: фронт-энд это
+    Sequential со списком подмодулей, поэтому обойти нужно всё поддерево.
+    Аккумулятор 'params' меняется на месте.
     """
     if isinstance(node, (DictConfig, ListConfig)):
         node = OmegaConf.to_container(node, resolve=False)
@@ -42,8 +42,8 @@ def _collect(node: Any, params: dict[str, Any]) -> None:
 
 def frontend_params(config: Mapping | None) -> dict[str, Any]:
     """
-    Collect everything that shapes the input of the model: the length every
-    waveform is brought to and the parameters of the inference front-end.
+    Собирает всё, что определяет вход модели: длину, к которой приводится
+    каждый сигнал, и параметры фронт-энда инференса.
     """
     if not isinstance(config, Mapping):
         return {}
@@ -60,7 +60,8 @@ def config_mismatches(
     saved_config: Mapping | None, current_config: Mapping | None
 ) -> list[str]:
     """
-    Compare the input pipelines of two runs, one line per differing parameter.
+    Сравнивает входные конвейеры двух запусков, по строке на каждый
+    разошедшийся параметр.
     """
     saved = frontend_params(saved_config)
     current = frontend_params(current_config)
@@ -73,7 +74,7 @@ def config_mismatches(
 
 def format_mismatch_warning(mismatches: list[str], checkpoint_path: str) -> str:
     """
-    Warning printed when the two pipelines disagree.
+    Предупреждение, которое печатается при расхождении двух конвейеров.
     """
     return (
         f"'{checkpoint_path}' was trained with another input pipeline "

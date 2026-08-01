@@ -3,24 +3,24 @@ defaults:
   - override /datasets: one_batch_test
   - _self_
 model:
-  dropout: 0.0 # a memorized batch must give a near-zero loss, not a noisy one
+  dropout: 0.0 # заученный батч должен давать почти нулевой лосс, а не шумный
 dataloader:
-  # the sanity check runs on 64 fixed utterances, workers are not needed
+  # проверка идёт на 64 фиксированных записях, воркеры тут не нужны
   num_workers: 2
   persistent_workers: False
-  # fp32 with the 863x600 input does not fit into 12 GB with the default 32
+  # fp32 при входе 863x600 не помещается в 12 ГБ с батчем 32 по умолчанию
   batch_size: 16
 lr_scheduler:
-  step_size: 1000000 # constant lr: the model must overfit, not converge
+  step_size: 1000000 # постоянный lr: модель должна переобучиться, а не сойтись
 loss_function:
-  class_weights: null # the subset is tiny, reweighting only adds noise
+  class_weights: null # подвыборка крошечная, перевзвешивание только добавит шума
 writer:
   run_name: "one_batch_test"
   mode: "offline"
 trainer:
   log_step: 5
   n_epochs: 50
-  use_amp: False # fp32, so that a failed check means a broken pipeline and not bf16
-  override: True # the check is re-run often
+  use_amp: False # fp32, чтобы провал проверки означал сломанный конвейер, а не bf16
+  override: True # проверка перезапускается часто
   early_stop: 50
   save_period: 50

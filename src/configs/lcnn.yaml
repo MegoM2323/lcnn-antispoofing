@@ -6,8 +6,8 @@ defaults:
   - dataloader: asvspoof
   - transforms: stft
   - _self_
-# number of samples in every waveform of a batch, ~4.87 s at 16 kHz.
-# The datasets cut the utterances to the same length while loading them.
+# число отсчётов в каждом сигнале батча, около 4,87 с при 16 кГц.
+# Датасеты обрезают записи до этой же длины прямо при загрузке.
 collate_max_len: 77870
 optimizer:
   _target_: torch.optim.Adam
@@ -16,39 +16,39 @@ optimizer:
   eps: 1e-8
   weight_decay: 1e-4
 lr_scheduler:
-  # arXiv:2103.11326: lr is halved every 10 epochs. The template calls
-  # scheduler.step() after every batch, hence step_size is given in batches:
-  # 10 epochs * 793 batches (25380 train utterances / batch_size 32, drop_last).
-  # Keep it in sync with dataloader.batch_size.
+  # arXiv:2103.11326: lr уполовинивается каждые 10 эпох. Шаблон вызывает
+  # scheduler.step() после каждого батча, поэтому step_size задан в батчах:
+  # 10 эпох * 793 батча (25380 обучающих записей / batch_size 32, drop_last).
+  # Значение надо держать согласованным с dataloader.batch_size.
   _target_: torch.optim.lr_scheduler.StepLR
   gamma: 0.5
   step_size: 7930
 loss_function:
   _target_: src.loss.CELoss
-  # LA train is imbalanced: 22800 spoof / 2580 bonafide = 8.84
+  # train-партиция LA несбалансирована: 22800 spoof / 2580 bonafide = 8.84
   class_weights: [1.0, 8.84]
 writer:
   project_name: "asvspoof-lcnn"
-  workspace: null # taken from ~/.comet.config
+  workspace: null # берётся из ~/.comet.config
   run_name: "lcnn_stft"
   loss_names: ["loss"]
 trainer:
   log_step: 50
   n_epochs: 30
-  epoch_len: null # null -> epoch-based training over the whole train partition
-  device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
-  resume_from: null # null or path to the checkpoint dir with *.pth and config.yaml
-  device: auto # device name or "auto"
-  use_amp: True # bf16 autocast: the 863x600 input makes activations the memory bottleneck
+  epoch_len: null # null -> эпоха это проход по всей train-партиции
+  device_tensors: ["data_object", "labels"] # какие тензоры класть на устройство (например, GPU)
+  resume_from: null # null или путь к каталогу чекпоинта с *.pth и config.yaml
+  device: auto # имя устройства или "auto"
+  use_amp: True # bf16 autocast: при входе 863x600 узкое место по памяти это активации
   amp_dtype: bfloat16
   max_grad_norm: 5
   skip_oom: True
-  override: False # if True, will override the previous run with the same name
-  monitor: "min dev_EER" # the EER is computed over the whole dev partition, lower is better
-  save_period: 5 # checkpoint each save_period epochs in addition to the best epoch
-  early_stop: 10 # epochs for early stopping
+  override: False # если True, предыдущий запуск с тем же именем будет перезаписан
+  monitor: "min dev_EER" # EER считается по всей dev-партиции, меньше значит лучше
+  save_period: 5 # чекпоинт каждые save_period эпох вдобавок к лучшей эпохе
+  early_stop: 10 # эпох до ранней остановки
   save_dir: "saved"
   seed: 1
-  # True is ~2.1x faster (70 -> 145 utterances/s) but the run stops being
-  # bit-to-bit reproducible: cuDNN picks the algorithms by measurement
+  # True даёт ускорение примерно в 2,1 раза (70 -> 145 записей/с), но запуск
+  # перестаёт быть побитово воспроизводимым: cuDNN подбирает алгоритмы замером
   cudnn_benchmark: False

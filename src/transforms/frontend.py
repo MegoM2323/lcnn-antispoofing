@@ -1,6 +1,6 @@
 """
-Front-ends that turn a batch of waveforms into the input of the model: the log
-STFT spectrogram and the LFCC, both computed on the device of the batch.
+Фронт-энды, превращающие батч сигналов во вход модели: логарифмическая
+STFT-спектрограмма и LFCC, оба считаются на устройстве батча.
 """
 
 import math
@@ -13,22 +13,21 @@ from torch import nn
 CROP_MODES = ("first", "random")
 PAD_MODES = ("repeat", "zero")
 
-EPS = 1e-8  # additive constant under the logarithms
-DELTA_WIN_LENGTH = 5  # window of the delta/delta-delta filter
+EPS = 1e-8  # аддитивная константа под логарифмами
+DELTA_WIN_LENGTH = 5  # окно фильтра delta/delta-delta
 
 
 def fix_frames(
     spec: torch.Tensor, n_frames: int, crop: str, pad_mode: str
 ) -> torch.Tensor:
     """
-    Bring a feature sequence to the fixed number of frames.
+    Приводит последовательность признаков к фиксированному числу фреймов.
 
-    Sequences shorter than n_frames are padded, longer ones are cropped.
-    Repeat padding (cyclic repetition of the utterance) is used in the
-    ASVspoof literature instead of zero padding, because silence carries
-    no spoofing cues and biases the network. 'crop' is "first" (the leading
-    frames, used at inference) or "random" (a train-time augmentation),
-    'pad_mode' is "repeat" or "zero".
+    Всё, что короче n_frames, дополняется, всё, что длиннее, обрезается.
+    В работах по ASVspoof вместо дополнения нулями принято циклически повторять
+    запись: тишина не несёт следов спуфинга и смещает сеть. Параметр crop это
+    "first" (первые фреймы, режим инференса) или "random" (аугментация на
+    обучении), pad_mode это "repeat" или "zero".
     """
     n_cur = spec.shape[-1]
     if n_cur == n_frames:
@@ -49,7 +48,7 @@ def fix_frames(
 
 
 def validate_frame_modes(crop: str, pad_mode: str) -> None:
-    # a typo here does not fail, it silently changes the input of the model
+    # опечатка здесь не ломает запуск, а молча меняет вход модели
     if crop not in CROP_MODES:
         raise ValueError(f"crop must be one of {CROP_MODES}, got {crop}")
     if pad_mode not in PAD_MODES:
@@ -58,7 +57,8 @@ def validate_frame_modes(crop: str, pad_mode: str) -> None:
 
 def autocast_dtype(device_type: str) -> torch.dtype | None:
     """
-    Dtype the surrounding autocast region expects, None if it is disabled.
+    Тип данных, которого ждёт окружающая область autocast; None, если он
+    выключен.
     """
     if torch.is_autocast_enabled(device_type):
         return torch.get_autocast_dtype(device_type)
@@ -67,12 +67,12 @@ def autocast_dtype(device_type: str) -> torch.dtype | None:
 
 class LogSpectrogram(nn.Module):
     """
-    Log power magnitude spectrum front-end for the FFT-LCNN system.
+    Фронт-энд системы FFT-LCNN: логарифм спектра мощности.
 
-    Follows the STC ASVspoof2019 submission (arXiv:1904.05576, Sec. 2.1):
-    1724-point FFT with a Blackman window, 863 frequency bins, no CMVN
-    (mean/variance normalization degraded EER in the original study), and
-    only the first 600 frames fed to the network.
+    Повторяет решение STC для ASVspoof2019 (arXiv:1904.05576, разд. 2.1):
+    1724-точечное FFT с окном Блэкмана, 863 частотных бина, без CMVN
+    (нормировка по среднему и дисперсии в исходной работе ухудшала EER) и
+    только первые 600 фреймов на вход сети.
     """
 
     def __init__(
@@ -111,12 +111,12 @@ class LogSpectrogram(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Turn a batch of waveforms (B, T) into (B, n_freqs, n_frames).
+        Превращает батч сигналов (B, T) в (B, n_freqs, n_frames).
         """
         out_dtype = autocast_dtype(x.device.type)
 
-        # STFT is numerically unstable (and partially unsupported) in bf16/fp16,
-        # so the front-end always runs in float32 regardless of the autocast state
+        # в bf16/fp16 STFT численно неустойчиво (и поддержано не полностью),
+        # поэтому фронт-энд всегда считается в float32 независимо от autocast
         with torch.autocast(device_type=x.device.type, enabled=False):
             spec = self.spectrogram(x.float())
             spec = torch.log(spec + self.eps)
@@ -129,13 +129,13 @@ class LogSpectrogram(nn.Module):
 
 class LFCC(nn.Module):
     """
-    Linear frequency cepstral coefficients front-end.
+    Фронт-энд на кепстральных коэффициентах в линейной шкале частот.
 
-    Follows the ASVspoof2019 baseline recipe as described in
-    arXiv:2103.11326 (Sec. 3.1): 20 ms frames with 10 ms shift, 512-point
-    FFT, 20 linearly spaced triangular filters, the zeroth cepstral
-    coefficient replaced by the log spectral energy, plus delta and
-    delta-delta features (60 dimensions in total).
+    Повторяет baseline-рецепт ASVspoof2019 в изложении arXiv:2103.11326
+    (разд. 3.1): окно 20 мс с шагом 10 мс, 512-точечное FFT, 20 равномерно
+    расставленных треугольных фильтров, нулевой кепстральный коэффициент
+    заменён логарифмом энергии спектра, плюс признаки delta и delta-delta
+    (всего 60 измерений).
     """
 
     fbanks: torch.Tensor
@@ -183,7 +183,7 @@ class LFCC(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Turn a batch of waveforms (B, T) into (B, n_features, n_frames).
+        Превращает батч сигналов (B, T) в (B, n_features, n_frames).
         """
         out_dtype = autocast_dtype(x.device.type)
 

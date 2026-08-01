@@ -1,8 +1,8 @@
 _target_: src.logger.CometMLWriter
 project_name: "asvspoof-lcnn"
-workspace: null # null -> the workspace from ~/.comet.config is used
+workspace: null # null -> берётся workspace из ~/.comet.config
 run_name: "testing"
-mode: "online" # "offline" writes a .zip next to the run instead of uploading
-loss_names: ["loss"] # which losses to log (useful for multi-loss tasks, s.a. GANs)
-log_checkpoints: False # set to True if you want to log checkpoints to Comet ML
-id_length: 32 # length of the run_id; Comet requires an alphanumeric key of 32-50 chars
+mode: "online" # при "offline" рядом с запуском пишется .zip вместо выгрузки
+loss_names: ["loss"] # какие лоссы логировать (полезно для задач с несколькими лоссами, например GAN)
+log_checkpoints: False # True, если нужно логировать чекпоинты в Comet ML
+id_length: 32 # длина run_id; Comet требует буквенно-цифровой ключ из 32-50 символов

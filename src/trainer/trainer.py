@@ -10,16 +10,16 @@ SCORE_HIST_BINS = 64
 
 class Trainer(BaseTrainer):
     """
-    Trainer for the anti-spoofing countermeasure.
+    Тренер антиспуфинг-контрмеры.
 
-    Adds two things on top of the base trainer:
+    Добавляет к базовому тренеру две вещи:
 
-    1. Mixed precision around the forward pass, see BaseTrainer._setup_amp.
-    2. Correct epoch-level EER. EER is a property of the whole score
-       distribution and is not decomposable over batches: the average of
-       per-batch EERs is not the EER of the partition. Scores of the whole
-       evaluation partition are therefore accumulated and the EER is computed
-       once per epoch, exactly like the official grading script does.
+    1. Смешанную точность вокруг прямого прохода, см. BaseTrainer._setup_amp.
+    2. Корректный EER на уровне эпохи. EER это свойство всего распределения
+       скоров, и по батчам он не раскладывается: среднее побатчевых EER не
+       равно EER партиции. Поэтому скоры всей эвалюационной партиции
+       накапливаются, а EER считается один раз за эпоху, ровно так же, как
+       это делает официальный проверяющий скрипт.
     """
 
     def __init__(self, *args, **kwargs):
@@ -27,20 +27,20 @@ class Trainer(BaseTrainer):
 
         self._setup_amp()
 
-        # buffers for the epoch-level EER (filled during evaluation only)
+        # буферы для EER на уровне эпохи (заполняются только при оценке)
         self._epoch_scores = []
         self._epoch_labels = []
 
     def process_batch(self, batch, metrics: MetricTracker):
         """
-        Run batch through the model, compute metrics, compute loss,
-        and do training step (during training stage).
+        Прогоняет батч через модель, считает метрики и лосс, а на стадии
+        обучения делает шаг оптимизации.
 
-        The function expects that criterion aggregates all losses
-        (if there are many) into a single one defined in the 'loss' key.
+        Функция рассчитывает, что criterion сводит все лоссы (если их
+        несколько) к одному, лежащему по ключу 'loss'.
         """
         batch = self.move_batch_to_device(batch)
-        batch = self.transform_batch(batch)  # transform batch on device -- faster
+        batch = self.transform_batch(batch)  # трансформы на устройстве, так быстрее
 
         metric_funcs = self.metrics["inference"]
         if self.is_train:
@@ -55,7 +55,7 @@ class Trainer(BaseTrainer):
             batch.update(all_losses)
 
         if self.is_train:
-            batch["loss"].backward()  # sum of all losses is always called loss
+            batch["loss"].backward()  # сумма всех лоссов всегда лежит в loss
             self._clip_grad_norm()
             self.optimizer.step()
             if self.lr_scheduler is not None:
@@ -63,7 +63,7 @@ class Trainer(BaseTrainer):
         else:
             self._accumulate_scores(batch)
 
-        # update metrics for each loss (in case of multiple losses)
+        # обновление метрик по каждому лоссу (на случай нескольких лоссов)
         for loss_name in self.config.writer.loss_names:
             metrics.update(loss_name, batch[loss_name].item())
 
@@ -73,12 +73,12 @@ class Trainer(BaseTrainer):
 
     def _evaluation_epoch(self, epoch, part, dataloader):
         """
-        Evaluate model on the partition after training for an epoch.
+        Оценивает модель на партиции после эпохи обучения.
 
-        Repeats the logic of the base method and additionally computes the EER
-        over the whole partition (see the class docstring). The value is logged
-        as the "EER" scalar and put into the returned logs, so that it appears
-        as "{part}_EER" in the common logs and can be monitored.
+        Повторяет логику базового метода и дополнительно считает EER по всей
+        партиции (см. докстринг класса). Значение логируется как скаляр "EER"
+        и кладётся в возвращаемые логи, поэтому в общих логах оно появляется
+        как "{part}_EER" и годится для мониторинга.
         """
         self.is_train = False
         self.model.eval()
@@ -100,7 +100,7 @@ class Trainer(BaseTrainer):
             self._log_scalars(self.evaluation_metrics)
             self._log_batch(
                 batch_idx, batch, part
-            )  # log only the last batch during inference
+            )  # при инференсе логируется только последний батч
 
         logs = self.evaluation_metrics.result()
 
@@ -115,16 +115,16 @@ class Trainer(BaseTrainer):
 
     def _log_batch(self, batch_idx, batch, mode="train"):
         """
-        Log data from batch. Calls self.writer.add_* to log data
-        to the experiment tracker.
+        Логирует данные батча, вызывая self.writer.add_* для отправки их
+        в трекер экспериментов.
 
-        For evaluation partitions the score distributions of the two classes
-        are logged as histograms: their overlap is exactly what the EER
-        measures, so the plot shows how separable the classes are.
+        Для эвалюационных партиций распределения скоров двух классов
+        логируются гистограммами: их перекрытие и есть то, что измеряет EER,
+        так что график показывает, насколько классы разделимы.
         """
         if mode == "train" or self.writer is None:
-            # nothing heavy on the train partition: the method is called
-            # every log_step steps and images/histograms slow training down
+            # на train-партиции ничего тяжёлого: метод вызывается каждые
+            # log_step шагов, а картинки и гистограммы замедляют обучение
             return
 
         scores, labels = self._collected_scores()
@@ -144,15 +144,15 @@ class Trainer(BaseTrainer):
 
     def _accumulate_scores(self, batch):
         """
-        Store detection scores and labels of the batch for the epoch-level EER.
+        Сохраняет детекционные скоры и метки батча для EER на уровне эпохи.
         """
         self._epoch_scores.append(logits_to_scores(batch["logits"]).cpu())
         self._epoch_labels.append(batch["labels"].detach().reshape(-1).cpu())
 
     def _collected_scores(self):
         """
-        Concatenate the scores and labels accumulated during the epoch,
-        (None, None) if nothing was accumulated.
+        Склеивает скоры и метки, накопленные за эпоху; (None, None), если
+        накопить ничего не успели.
         """
         if not self._epoch_scores:
             return None, None

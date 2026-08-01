@@ -1,11 +1,11 @@
 """
-Reader of the ASVspoof2019 CM protocol files.
+Чтение файлов CM-протокола ASVspoof2019.
 
-Every submission tool needs the same three fields of a trial: the utterance id,
-the attack it was produced by and its class. ASVspoofDataset parses the very
-same file, but it builds an index of audio paths and refuses to work without
-the waveforms; scoring an existing csv must stay possible with the corpus
-unmounted, hence a standalone reader.
+Всем инструментам работы с посылкой нужны одни и те же три поля испытания:
+идентификатор записи, атака, которой она порождена, и класс. ASVspoofDataset
+разбирает тот же самый файл, но строит индекс путей к аудио и без самих
+сигналов работать отказывается, а проверять готовый csv надо и с
+неподключённым корпусом. Отсюда отдельный ридер.
 """
 
 from pathlib import Path
@@ -14,13 +14,13 @@ from typing import NamedTuple
 
 class ProtocolEntry(NamedTuple):
     """
-    One trial of the CM protocol.
+    Одно испытание CM-протокола.
 
-    Attributes:
-        utt_id (str): utterance id, the key of the submission csv.
-        attack_id (str): spoofing algorithm ("A07" ... "A19"), "-" for
-            bonafide trials.
-        label (int): 1 for bonafide, 0 for spoof.
+    Поля:
+        utt_id (str): идентификатор записи, ключ csv с посылкой.
+        attack_id (str): алгоритм атаки ("A07" ... "A19"), "-" для испытаний
+            bonafide.
+        label (int): 1 для bonafide, 0 для spoof.
     """
 
     utt_id: str
@@ -30,7 +30,7 @@ class ProtocolEntry(NamedTuple):
 
 def read_protocol_entries(protocol_path: str | Path) -> list[ProtocolEntry]:
     """
-    Read a CM protocol file into the trials, in the order of the protocol.
+    Читает файл CM-протокола в список испытаний, в порядке протокола.
     """
     protocol_path = Path(protocol_path)
 
@@ -56,8 +56,8 @@ def filter_entries(
     entries: list[ProtocolEntry], utt_ids: set[str] | None
 ) -> list[ProtocolEntry]:
     """
-    Keep the trials of a subset of utterances, in the order of the protocol.
-    None keeps everything.
+    Оставляет испытания заданного подмножества записей, в порядке протокола.
+    None оставляет всё.
     """
     if utt_ids is None:
         return list(entries)

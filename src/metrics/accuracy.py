@@ -5,12 +5,12 @@ from src.metrics.base_metric import BaseMetric
 
 class AccuracyMetric(BaseMetric):
     """
-    Plain classification accuracy (argmax over logits).
+    Обычная точность классификации (argmax по логитам).
 
-    Accuracy is a poor target metric for anti-spoofing because of the strong
-    class imbalance (a constant "spoof" prediction already gives ~90% on the
-    ASVspoof2019 LA train partition), but it is cheap and decomposable over
-    batches, which makes it a convenient sanity check during training.
+    Для антиспуфинга точность плохая целевая метрика из-за сильного перекоса
+    классов (постоянный ответ "spoof" уже даёт около 90 % на train-партиции
+    ASVspoof2019 LA), но она дёшева и раскладывается по батчам, что делает её
+    удобной проверкой вменяемости во время обучения.
     """
 
     def __call__(self, logits: torch.Tensor, labels: torch.Tensor, **batch) -> float:

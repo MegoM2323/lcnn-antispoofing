@@ -1,6 +1,6 @@
 """
-Cross-entropy with class weights that compensate the bonafide/spoof imbalance
-of the ASVspoof2019 LA train partition.
+Кросс-энтропия с весами классов, компенсирующими перекос bonafide/spoof
+в train-партиции ASVspoof2019 LA.
 """
 
 import torch
@@ -9,23 +9,23 @@ from torch import nn
 
 class CELoss(nn.Module):
     """
-    Weighted cross-entropy, the main loss for the anti-spoofing classifier.
+    Взвешенная кросс-энтропия, основной лосс антиспуфинг-классификатора.
 
-    Class order follows the dataset convention: index 0 = spoof,
-    index 1 = bonafide. The LA train partition holds 22800 spoof against 2580
-    bonafide utterances, so the configs give the bonafide class the weight
-    22800 / 2580 = 8.84 and an error on the rare class costs that much more.
+    Порядок классов такой же, как в датасете: индекс 0 = spoof, индекс 1 =
+    bonafide. В train-партиции LA 22800 подделок против 2580 записей bonafide,
+    поэтому конфиги дают классу bonafide вес 22800 / 2580 = 8.84, и ошибка на
+    редком классе стоит во столько же раз дороже.
     """
 
-    # annotated explicitly: `register_buffer` alone leaves the attribute typed
-    # as `Tensor | Module` for the type checker
+    # аннотация проставлена явно: после одного `register_buffer` тайпчекер
+    # видит атрибут как `Tensor | Module`
     class_weights: torch.Tensor | None
 
     def __init__(self, class_weights: list[float] | None = None):
         """
-        Args:
-            class_weights (list[float] | None): per-class weights ordered as
-                [spoof, bonafide]. None means an unweighted cross-entropy.
+        Аргументы:
+            class_weights (list[float] | None): веса классов в порядке
+                [spoof, bonafide]. None означает невзвешенную кросс-энтропию.
         """
         super().__init__()
 
@@ -34,18 +34,18 @@ class CELoss(nn.Module):
             if class_weights is None
             else torch.tensor(list(class_weights), dtype=torch.float32)
         )
-        # registered as a buffer so that `loss_function.to(device)` moves it
+        # регистрируется как буфер, чтобы `loss_function.to(device)` его переносил
         self.register_buffer("class_weights", weight_tensor)
 
     def forward(
         self, logits: torch.Tensor, labels: torch.Tensor, **batch
     ) -> dict[str, torch.Tensor]:
         """
-        Args:
-            logits (Tensor): model output of shape (B, n_classes).
-            labels (Tensor): ground-truth labels of shape (B,).
-        Returns:
-            losses (dict): dict with the 'loss' key.
+        Аргументы:
+            logits (Tensor): выход модели формы (B, n_classes).
+            labels (Tensor): истинные метки формы (B,).
+        Возвращает:
+            losses (dict): словарь с ключом 'loss'.
         """
         loss = nn.functional.cross_entropy(logits, labels, weight=self.class_weights)
         return {"loss": loss}

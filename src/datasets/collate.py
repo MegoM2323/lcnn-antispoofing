@@ -1,6 +1,6 @@
 """
-Assembly of dataset items into a batch: every waveform of the batch is brought
-to the same number of samples, the remaining fields are stacked as they are.
+Сборка элементов датасета в батч: каждый сигнал приводится к одному и тому же
+числу отсчётов, остальные поля складываются как есть.
 """
 
 from collections.abc import Callable
@@ -8,24 +8,24 @@ from functools import partial
 
 import torch
 
-# what the configs of the project set 'collate_max_len' to: 77870 samples,
-# 4.87 s at 16 kHz
+# значение, которое конфиги проекта ставят в 'collate_max_len': 77870 отсчётов,
+# то есть 4,87 с при 16 кГц
 DEFAULT_MAX_LEN = 77870
 
 
 def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
     """
-    Bring a waveform to the fixed length of max_len samples.
+    Приводит сигнал к фиксированной длине в max_len отсчётов.
 
-    Short utterances are repeated cyclically instead of being zero-padded:
-    silence at the end of an utterance is an artifact that the model learns
-    to use as a shortcut, which is the standard practice for ASVspoof.
+    Короткие записи повторяются циклически, а не дополняются нулями: тишина
+    в конце записи это артефакт, который модель научается использовать как
+    подсказку. Так принято делать в работах по ASVspoof.
 
-    Args:
-        audio (Tensor): waveform of shape (T,) or (1, T).
-        max_len (int): required number of samples.
-    Returns:
-        audio (Tensor): waveform of shape (max_len,).
+    Аргументы:
+        audio (Tensor): сигнал формы (T,) или (1, T).
+        max_len (int): нужное число отсчётов.
+    Возвращает:
+        audio (Tensor): сигнал формы (max_len,).
     """
     audio = audio.reshape(-1)
 
@@ -41,15 +41,14 @@ def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
 
 def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dict:
     """
-    Collate fields in the dataset items and bring the waveforms to the
-    same length. Converts individual items into a batch.
+    Складывает поля элементов датасета и приводит сигналы к одной длине,
+    превращая отдельные элементы в батч.
 
-    Args:
-        dataset_items (list[dict]): list of objects from dataset.__getitem__.
-        max_len (int): number of samples in each waveform of the batch.
-    Returns:
-        result_batch (dict[Tensor]): dict, containing batch-version
-            of the tensors.
+    Аргументы:
+        dataset_items (list[dict]): список объектов из dataset.__getitem__.
+        max_len (int): число отсчётов в каждом сигнале батча.
+    Возвращает:
+        result_batch (dict[Tensor]): словарь с батчевыми версиями тензоров.
     """
     result_batch = {
         "data_object": torch.stack(
@@ -69,7 +68,7 @@ def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dic
 
 def get_collate_fn(max_len: int = DEFAULT_MAX_LEN) -> Callable[[list[dict]], dict]:
     """
-    Create a collate_fn with the given waveform length, since collate_fn itself
-    is passed to the dataloader without arguments.
+    Создаёт collate_fn с заданной длиной сигнала, поскольку сама collate_fn
+    передаётся в даталоадер без аргументов.
     """
     return partial(collate_fn, max_len=max_len)

@@ -3,8 +3,8 @@ train:
   part: "train"
   data_dir: ${oc.env:ASVSPOOF_DIR,${hydra:runtime.cwd}/data/LA}
   max_len: ${collate_max_len}
-  random_crop: False # the same waveforms on each epoch to overfit a single batch
-  shuffle_index: True # both partitions get the same subset (fixed seed 42)
+  random_crop: False # одни и те же сигналы на каждой эпохе, чтобы заучить один батч
+  shuffle_index: True # обе партиции получают одну подвыборку (фиксированный seed 42)
   limit: 64
 dev:
   _target_: src.datasets.ASVspoofDataset

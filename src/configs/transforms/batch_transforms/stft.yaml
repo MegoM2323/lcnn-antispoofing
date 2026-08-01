@@ -1,8 +1,8 @@
-# FFT-LCNN front-end from arXiv:1904.05576: 1724-point FFT, Blackman window,
-# 863 frequency bins, first 600 frames, no CMVN.
+# фронт-энд FFT-LCNN из arXiv:1904.05576: 1724-точечное FFT, окно Блэкмана,
+# 863 частотных бина, первые 600 фреймов, без CMVN.
 train:
-  data_object: # name of the tensor on which we apply transform
-    _target_: torch.nn.Sequential # to apply several transforms sequentially
+  data_object: # имя тензора, к которому применяется трансформ
+    _target_: torch.nn.Sequential # чтобы применить несколько трансформов подряд
     _args_:
       - _target_: src.transforms.LogSpectrogram
         n_fft: 1724
@@ -12,7 +12,7 @@ train:
         power: 2.0
         eps: 1e-8
         n_frames: 600
-        crop: random # random slice of a long utterance acts as augmentation
+        crop: random # случайный кусок длинной записи работает как аугментация
         pad_mode: repeat
 inference:
   data_object:
@@ -26,5 +26,5 @@ inference:
         power: 2.0
         eps: 1e-8
         n_frames: 600
-        crop: first # "only the first 600 features for each file were used"
+        crop: first # цитата из статьи: "only the first 600 features for each file were used"
         pad_mode: repeat

@@ -1,18 +1,18 @@
 defaults:
   - model: lcnn
   - metrics: accuracy
-  - datasets: asvspoof_eval # we do not want to run inference on training data
+  - datasets: asvspoof_eval # инференс не должен идти по обучающим данным
   - dataloader: asvspoof
   - transforms: stft
   - _self_
-# must match the length the model was trained with (see lcnn.yaml)
+# должно совпадать с длиной, на которой обучалась модель (см. lcnn.yaml)
 collate_max_len: 77870
 inferencer:
-  device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
-  device: auto # device name or "auto"
-  use_amp: False # fp32 scores for the submission, bf16 only changes speed
+  device_tensors: ["data_object", "labels"] # какие тензоры класть на устройство (например, GPU)
+  device: auto # имя устройства или "auto"
+  use_amp: False # скоры посылки считаются в fp32, bf16 меняет только скорость
   amp_dtype: bfloat16
-  save_path: "eval" # predictions are saved to data/saved/${inferencer.save_path}
+  save_path: "eval" # предсказания пишутся в data/saved/${inferencer.save_path}
   seed: 1
-  cudnn_benchmark: False # see trainer.cudnn_benchmark in lcnn.yaml
-  from_pretrained: "saved/lcnn_stft_600f/model_best.pth" # path to the pretrained model
+  cudnn_benchmark: False # см. trainer.cudnn_benchmark в lcnn.yaml
+  from_pretrained: "saved/lcnn_stft_600f/model_best.pth" # путь к обученной модели

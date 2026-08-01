@@ -1,17 +1,17 @@
 """
-Score-level fusion of several countermeasure systems.
+Объединение нескольких контрмер на уровне скоров.
 
-Fusing systems that see the input differently (another front-end, another seed)
-is the standard way of squeezing the last points out of this task: the STC
-system of arXiv:1904.05576 reports 1.84% EER for the fusion against 4.53% for
-its best single model. Only the scores are combined, so the architecture of
-every member stays the LCNN required by the assignment.
+Объединение систем, которые видят вход по-разному (другой фронт-энд, другой
+seed), это стандартный способ выжать из задачи последние доли процента: система
+STC из arXiv:1904.05576 даёт 1,84 % EER для объединения против 4,53 % для своей
+лучшей одиночной модели. Складываются только скоры, поэтому архитектура каждого
+участника остаётся тем самым LCNN, которого требует задание.
 
-The scores of two runs are not comparable as they are: the LLR of one model may
-live in [-30, 20] and the LLR of another in [-4, 6], so a plain average would
-let the model with the widest range decide alone. Every set is therefore
-normalized before the weighted average. Both normalizations are monotone, hence
-neither changes the EER of the single system it is applied to.
+Скоры двух прогонов несравнимы как есть: LLR одной модели может лежать
+в [-30, 20], а LLR другой в [-4, 6], и при обычном усреднении решала бы одна
+модель с самым широким диапазоном. Поэтому перед взвешенным усреднением каждый
+набор нормируется. Обе нормировки монотонны, так что EER отдельной системы,
+к которой их применили, ни одна из них не меняет.
 """
 
 from collections.abc import Mapping, Sequence
@@ -26,8 +26,8 @@ DEFAULT_NORMALIZATION = "rank"
 
 def z_normalize(scores: np.ndarray) -> np.ndarray:
     """
-    Center the scores and bring them to a unit standard deviation. A constant
-    set of scores carries no information and becomes zeros.
+    Центрирует скоры и приводит их к единичному стандартному отклонению.
+    Постоянный набор скоров не несёт информации и обращается в нули.
     """
     scores = as_float_array(scores)
     std = float(scores.std())
@@ -38,13 +38,13 @@ def z_normalize(scores: np.ndarray) -> np.ndarray:
 
 def rank_normalize(scores: np.ndarray) -> np.ndarray:
     """
-    Replace the scores by their ranks, scaled to [0, 1].
+    Заменяет скоры их рангами, отмасштабированными в [0, 1].
 
-    Ranks ignore the shape of the score distribution, so a single system with a
-    heavy tail (a handful of utterances scored -60 while the rest sits around
-    zero) cannot drag the fusion after itself the way z-normalization lets it.
-    Tied scores share the average rank, otherwise the order inside a tie would
-    be decided by the order of the file.
+    Ранги не зависят от формы распределения скоров, поэтому одна система
+    с тяжёлым хвостом (горстка записей со скором -60 при остальных около нуля)
+    не может утянуть объединение за собой так, как это позволяет z-нормировка.
+    Одинаковые скоры получают средний ранг, иначе порядок внутри такой группы
+    определялся бы порядком строк в файле.
     """
     scores = as_float_array(scores)
     if scores.size < 2:
@@ -70,11 +70,11 @@ def normalize_scores(
 
 def check_same_keys(systems: Sequence[Mapping[str, float]]) -> list[str]:
     """
-    Check that every system scored exactly the same utterances and return the
-    ids in the order of the first system.
+    Проверяет, что все системы оценили ровно один и тот же набор записей, и
+    возвращает идентификаторы в порядке первой системы.
 
-    A fusion built on a partial intersection would silently produce a csv with
-    a hole in it, and a hole is a KeyError in the grading script.
+    Объединение по частичному пересечению молча дало бы csv с дырой, а дыра это
+    KeyError в проверяющем скрипте.
     """
     reference = list(systems[0])
     reference_set = set(reference)
@@ -98,9 +98,9 @@ def fuse_scores(
     method: str = DEFAULT_NORMALIZATION,
 ) -> dict[str, float]:
     """
-    Combine the scores of several systems into one set, in the order of the
-    first system. The weights are normalized to sum to one, so only their
-    proportion matters; equal weights by default.
+    Сводит скоры нескольких систем в один набор, в порядке первой системы.
+    Веса нормируются к единичной сумме, так что важна только их пропорция;
+    по умолчанию веса равные.
     """
     utt_ids = check_same_keys(systems)
 

@@ -4,28 +4,27 @@ from torch import nn
 
 class MFM(nn.Module):
     """
-    Max-Feature-Map activation (MFM 2/1).
+    Активация Max-Feature-Map (MFM 2/1).
 
-    Splits the input into two equal halves along the channel (feature)
-    dimension and takes the element-wise maximum of them:
-    y^k = max(x^k, x^{k + N}), where N is the number of output channels.
-    See Eq. 1 of arXiv:1511.02683. The same operation covers both types of the
-    original paper: type 1 after a convolution (4D input, B x 2N x F x T) and
-    type 2 after a fully connected layer (2D input, B x 2N).
+    Вход делится пополам по канальному (признаковому) измерению, и берётся
+    поэлементный максимум половин: y^k = max(x^k, x^{k + N}), где N это число
+    выходных каналов. См. формулу 1 в arXiv:1511.02683. Одна и та же операция
+    покрывает оба типа из исходной статьи: тип 1 после свёртки (4D вход,
+    B x 2N x F x T) и тип 2 после полносвязного слоя (2D вход, B x 2N).
     """
 
     def __init__(self, out_channels: int):
         """
-        Args:
-            out_channels (int): number of output channels/features (N).
-                The layer expects 2 * out_channels input channels.
+        Аргументы:
+            out_channels (int): число выходных каналов/признаков (N).
+                На входе слой ожидает 2 * out_channels каналов.
         """
         super().__init__()
 
         self.out_channels = out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # a wrong number of channels is otherwise a silent halving of the layer
+        # иначе неверное число каналов молча уполовинит слой
         if x.shape[1] != 2 * self.out_channels:
             raise ValueError(
                 f"MFM expects {2 * self.out_channels} channels, got {x.shape[1]}"

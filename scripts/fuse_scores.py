@@ -1,10 +1,10 @@
 """
-Fuse the scores of several runs into one submission csv.
+Объединение скоров нескольких прогонов в один csv посылки.
 
-Score-level fusion of systems that look at the signal differently (another
-front-end, another epoch) stays inside the assignment: every member is still an
-LCNN, only their scores are combined. See src/metrics/score_fusion.py for why
-the scores are normalized before being averaged.
+Объединение на уровне скоров систем, которые смотрят на сигнал по-разному
+(другой фронт-энд, другая эпоха), не выходит за рамки задания: каждый участник
+по-прежнему LCNN, складываются только их скоры. Почему скоры нормируются перед
+усреднением, написано в src/metrics/score_fusion.py.
 
     python3 scripts/fuse_scores.py data/saved/{lfcc21,stft15}/eval_scores.csv \\
         -o mppanin.csv

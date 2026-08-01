@@ -1,15 +1,15 @@
 """
-Reference implementation of the Equal Error Rate (EER) computation.
+Эталонная реализация подсчёта Equal Error Rate (EER).
 
-compute_det_curve and compute_eer are taken verbatim (logic-wise) from the
-official ASVspoof2019 evaluation package (calculate_eer.py shipped with the
-course). They are kept unchanged on purpose: the final submission is graded
-with exactly these functions, so any deviation would make local numbers
-incomparable with the leaderboard ones.
+Функции compute_det_curve и compute_eer по логике дословно взяты из
+официального пакета оценки ASVspoof2019 (calculate_eer.py из материалов
+курса). Они намеренно оставлены без изменений: итоговая посылка проверяется
+ровно этими функциями, поэтому любое расхождение сделало бы локальные числа
+несравнимыми с числами лидерборда.
 
-Only cosmetic changes were applied (formatting + type hints). The rest of this
-module contains thin numpy-2.x-safe wrappers shared by the metric, the trainer
-and the inferencer.
+Изменения носят косметический характер (форматирование, аннотации типов и
+перевод комментариев). Остальная часть модуля это тонкие обёртки, безопасные
+для numpy 2.x, которые общие для метрики, тренера и инференсера.
 """
 
 from collections.abc import Callable
@@ -17,10 +17,11 @@ from collections.abc import Callable
 import numpy as np
 import torch
 
-# EER (in %) reported when one of the two classes is missing. The official
-# calculate_eer.py has no such case: it is always given both classes and would
-# divide by zero otherwise. A chance-level value is used instead of nan because
-# a single nan would poison the running average of the whole epoch.
+# EER (в %), которое возвращается, когда один из двух классов отсутствует.
+# В официальном calculate_eer.py такого случая нет: ему всегда передают оба
+# класса, иначе было бы деление на ноль. Вместо nan берётся значение уровня
+# случайного угадывания, потому что один nan испортил бы бегущее среднее за
+# всю эпоху.
 DEGENERATE_EER = 50.0
 
 
@@ -28,15 +29,15 @@ def compute_det_curve(
     target_scores: np.ndarray, nontarget_scores: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Compute the Detection Error Tradeoff (DET) curve.
+    Считает кривую Detection Error Tradeoff (DET).
 
-    Args:
-        target_scores (np.ndarray): scores of the target (bonafide) trials.
-        nontarget_scores (np.ndarray): scores of the nontarget (spoof) trials.
-    Returns:
-        frr (np.ndarray): false rejection rates.
-        far (np.ndarray): false acceptance rates.
-        thresholds (np.ndarray): thresholds corresponding to frr/far.
+    Аргументы:
+        target_scores (np.ndarray): скоры целевых (bonafide) испытаний.
+        nontarget_scores (np.ndarray): скоры нецелевых (spoof) испытаний.
+    Возвращает:
+        frr (np.ndarray): доли ложных отказов.
+        far (np.ndarray): доли ложных пропусков.
+        thresholds (np.ndarray): пороги, отвечающие frr/far.
     """
     n_scores = target_scores.size + nontarget_scores.size
     all_scores = np.concatenate((target_scores, nontarget_scores))
@@ -44,22 +45,22 @@ def compute_det_curve(
         (np.ones(target_scores.size), np.zeros(nontarget_scores.size))
     )
 
-    # Sort labels based on scores
+    # Сортировка меток по скорам
     indices = np.argsort(all_scores, kind="mergesort")
     labels = labels[indices]
 
-    # Compute false rejection and false acceptance rates
+    # Подсчёт долей ложных отказов и ложных пропусков
     tar_trial_sums = np.cumsum(labels)
     nontarget_trial_sums = nontarget_scores.size - (
         np.arange(1, n_scores + 1) - tar_trial_sums
     )
 
-    # false rejection rates
+    # доли ложных отказов
     frr = np.concatenate((np.atleast_1d(0), tar_trial_sums / target_scores.size))
     far = np.concatenate(
         (np.atleast_1d(1), nontarget_trial_sums / nontarget_scores.size)
-    )  # false acceptance rates
-    # Thresholds are the sorted scores
+    )  # доли ложных пропусков
+    # Пороги это отсортированные скоры
     thresholds = np.concatenate(
         (np.atleast_1d(all_scores[indices[0]] - 0.001), all_scores[indices])
     )
@@ -71,16 +72,16 @@ def compute_eer(
     bonafide_scores: np.ndarray, other_scores: np.ndarray
 ) -> tuple[float, float]:
     """
-    Returns equal error rate (EER) and the corresponding threshold.
+    Возвращает equal error rate (EER) и отвечающий ему порог.
 
-    The EER is a fraction in [0, 1], not a percentage.
+    EER это доля из [0, 1], а не проценты.
 
-    Args:
-        bonafide_scores (np.ndarray): scores of the bonafide trials.
-        other_scores (np.ndarray): scores of the spoofed trials.
-    Returns:
-        eer (float): equal error rate in [0, 1].
-        threshold (float): threshold at which frr and far are the closest.
+    Аргументы:
+        bonafide_scores (np.ndarray): скоры испытаний bonafide.
+        other_scores (np.ndarray): скоры поддельных испытаний.
+    Возвращает:
+        eer (float): equal error rate из [0, 1].
+        threshold (float): порог, при котором frr и far ближе всего.
     """
     frr, far, thresholds = compute_det_curve(bonafide_scores, other_scores)
     abs_diffs = np.abs(frr - far)
@@ -91,8 +92,9 @@ def compute_eer(
 
 def as_float_array(values) -> np.ndarray:
     """
-    Convert an arbitrary sequence of scores/labels into a flat float64 array:
-    compute_det_curve relies on .size and on numpy broadcasting semantics.
+    Превращает произвольную последовательность скоров или меток в плоский
+    массив float64: compute_det_curve опирается на .size и на семантику
+    броадкастинга numpy.
     """
     array = np.asarray(values, dtype=np.float64)
     return np.atleast_1d(array).reshape(-1)
@@ -100,12 +102,12 @@ def as_float_array(values) -> np.ndarray:
 
 def compute_eer_percent(scores, labels) -> float:
     """
-    Compute the EER (in percents) for a flat collection of scores and labels.
+    Считает EER (в процентах) для плоского набора скоров и меток.
 
-    The score convention is the same as in the official grading script: a
-    higher score means "more likely bonafide", and bonafide trials are the ones
-    with label == 1. Feeding scores with the opposite sign yields 100 - EER
-    instead of EER. DEGENERATE_EER is returned if a class is not present.
+    Соглашение о скорах то же, что в официальном проверяющем скрипте: чем выше
+    скор, тем вероятнее bonafide, а испытания bonafide это те, у которых
+    label == 1. Скоры с обратным знаком дадут 100 - EER вместо EER. Если один
+    из классов отсутствует, возвращается DEGENERATE_EER.
     """
     scores_array = as_float_array(scores)
     labels_array = as_float_array(labels)
@@ -122,9 +124,9 @@ def compute_eer_percent(scores, labels) -> float:
 
 def logits_to_scores(logits: torch.Tensor) -> torch.Tensor:
     """
-    Reduce the model output to the detection score of the grading script: the
-    log-likelihood ratio of bonafide (class 1) against spoof (class 0), so that
-    a higher score means "more likely bonafide".
+    Сводит выход модели к детекционному скору проверяющего скрипта: отношению
+    правдоподобий bonafide (класс 1) против spoof (класс 0) в логарифме, так
+    что чем выше скор, тем вероятнее bonafide.
     """
     logits = logits.detach().float()
     return logits[:, 1] - logits[:, 0]
@@ -136,11 +138,12 @@ def epoch_eer(
     warn: Callable[[str], None] | None = None,
 ) -> float | None:
     """
-    Compute the EER over the scores of a whole partition.
+    Считает EER по скорам целой партиции.
 
-    Unlike compute_eer_percent, a degenerate partition gives None instead of
-    DEGENERATE_EER: a chance-level number logged as the epoch EER would look
-    like a real result. 'warn' is called with an explanation in that case.
+    В отличие от compute_eer_percent, для вырожденной партиции возвращается
+    None, а не DEGENERATE_EER: значение уровня случайного угадывания в логах
+    выглядело бы как настоящий результат. В этом случае вызывается 'warn'
+    с пояснением.
     """
     if scores is None or labels is None or scores.numel() == 0:
         return None

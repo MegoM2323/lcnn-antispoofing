@@ -1,8 +1,9 @@
-# LFCC front-end from arXiv:2103.11326: 20 ms / 10 ms frames, 512-point FFT,
-# 20 linear triangular filters, c0 replaced by log energy, + delta + delta-delta.
+# фронт-энд LFCC из arXiv:2103.11326: окно 20 мс с шагом 10 мс, 512-точечное FFT,
+# 20 треугольных фильтров в линейной шкале, c0 заменён логарифмом энергии,
+# плюс delta и delta-delta.
 train:
-  data_object: # name of the tensor on which we apply transform
-    _target_: torch.nn.Sequential # to apply several transforms sequentially
+  data_object: # имя тензора, к которому применяется трансформ
+    _target_: torch.nn.Sequential # чтобы применить несколько трансформов подряд
     _args_:
       - _target_: src.transforms.LFCC
         sample_rate: 16000

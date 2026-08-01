@@ -1,13 +1,13 @@
 device: "auto"
-train: # metrics that are calculated during training
+train: # метрики, которые считаются во время обучения
   - _target_: src.metrics.AccuracyMetric
     name: "TRAIN_Accuracy"
-inference: # metrics that are calculated during inference (eval)
-  # No running EER here: MetricTracker averages the per-batch values, and the
-  # dev partition starts with 79 bonafide-only batches out of 777, so the
-  # average degenerates into a constant (50.0 * 79 / 777 = 5.0837) that repeats
-  # bit for bit across epochs and says nothing about the model. The EER of the
-  # whole partition is computed separately by the trainer and the inferencer
-  # and is logged as "{part}_EER".
+inference: # метрики, которые считаются во время инференса (eval)
+  # Побатчевого EER здесь нет: MetricTracker усредняет значения по батчам, а
+  # dev-партиция начинается с 79 батчей из 777, где есть только bonafide,
+  # поэтому среднее вырождается в константу (50.0 * 79 / 777 = 5.0837), которая
+  # побитово повторяется от эпохи к эпохе и ничего не говорит о модели. EER всей
+  # партиции считают отдельно тренер и инференсер, он логируется как
+  # "{part}_EER".
   - _target_: src.metrics.AccuracyMetric
     name: "Accuracy"
