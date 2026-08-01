@@ -19,7 +19,7 @@ from typing import Any
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
-from src.datasets.collate import DEFAULT_MAX_LEN
+from src.datasets.collate import LEGACY_MAX_LEN
 
 # parameters of the inference front-end that change the input of the model
 FRONTEND_KEYS = ("n_fft", "win_length", "hop_length", "window", "n_frames", "crop")
@@ -74,14 +74,14 @@ def collate_max_len(config: Mapping | None) -> tuple[int, bool]:
     Args:
         config (Mapping | None): run config.
     Returns:
-        value (int): configured length or the collate_fn default.
-        is_default (bool): True if the config does not set the key. Old
-            checkpoints were trained before the key existed, and back then
-            'collate_fn' padded to DEFAULT_MAX_LEN.
+        value (int): configured length, or LEGACY_MAX_LEN if the key is absent.
+        is_default (bool): True if the config does not set the key. Such a
+            checkpoint was trained before the key existed, and back then
+            'collate_fn' padded to LEGACY_MAX_LEN.
     """
     value = select(config, ("collate_max_len",))
     if value is None:
-        return DEFAULT_MAX_LEN, True
+        return LEGACY_MAX_LEN, True
     return int(value), False
 
 

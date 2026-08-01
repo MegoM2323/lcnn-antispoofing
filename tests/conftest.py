@@ -67,7 +67,7 @@ def build_partition(
         part (str): "train", "dev" or "eval".
         n_utterances (int): number of utterances to generate.
         durations (tuple): durations cycled through, in seconds. Values below
-            4.04 s exercise the padding branch of the collate function.
+            4.87 s exercise the padding branch of the collate function.
     Returns:
         entries (list[tuple[str, int]]): (utterance_id, label) pairs, where the
             label is 1 for bonafide and 0 for spoof.

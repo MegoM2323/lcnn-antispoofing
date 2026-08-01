@@ -1,3 +1,8 @@
+"""
+Cross-entropy with class weights that compensate the bonafide/spoof imbalance
+of the ASVspoof2019 LA train partition.
+"""
+
 import torch
 from torch import nn
 

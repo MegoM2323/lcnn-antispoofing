@@ -1,3 +1,8 @@
+"""
+Front-ends that turn a batch of waveforms into the input of the model: the log
+STFT spectrogram and the LFCC, both computed on the device of the batch.
+"""
+
 import math
 
 import torch

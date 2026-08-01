@@ -1,3 +1,8 @@
+"""
+Index of the ASVspoof2019 LA partitions built from the official CM protocols,
+with the reading and the cropping of a single utterance.
+"""
+
 import hashlib
 import json
 import logging
@@ -138,10 +143,9 @@ class ASVspoofDataset(BaseDataset):
 
         try:
             cached = read_json(str(index_path))
-        except (OSError, json.JSONDecodeError) as exception:
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(
-                f"Cannot read the cached index {index_path} ({exception}), "
-                "rebuilding it"
+                f"Cannot read the cached index {index_path} ({e}), rebuilding it"
             )
             return None
 
@@ -299,9 +303,9 @@ class ASVspoofDataset(BaseDataset):
                     audio_file.seek(offset)
                 frames = -1 if self.max_len is None else self.max_len
                 audio = audio_file.read(frames=frames, dtype="float32", always_2d=True)
-        except (sf.LibsndfileError, RuntimeError, OSError) as exception:
-            logger.error(f"Failed to read audio file {path}: {exception}")
-            raise RuntimeError(f"Cannot read audio file {path}") from exception
+        except (sf.LibsndfileError, RuntimeError, OSError) as e:
+            logger.error(f"Failed to read audio file {path}: {e}")
+            raise RuntimeError(f"Cannot read audio file {path}") from e
 
         data_object = torch.from_numpy(audio).T
         if data_object.shape[0] > 1:

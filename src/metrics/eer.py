@@ -16,12 +16,18 @@ class EERMetric(BaseMetric):
     Equal Error Rate for voice anti-spoofing countermeasures.
 
     EER is not decomposable over batches: averaging per-batch EERs is not the
-    same as the EER of the whole partition. To keep the value logged by
-    MetricTracker meaningful, this metric keeps an internal buffer of all
-    scores seen so far and returns the running EER (computed over the whole
-    buffer) on every call. The last value logged in an epoch is therefore the
-    EER over the full partition, and the arithmetic average reported by the
-    tracker is a smoothed approximation of it.
+    same as the EER of the whole partition. The metric therefore keeps an
+    internal buffer of every score it has been given and recomputes the EER
+    over the whole buffer on each call, so the value returned after the last
+    batch of a partition is the EER of that partition.
+
+    Only that last value means anything. MetricTracker averages everything a
+    metric returns during an epoch, and the average over a growing prefix of
+    the partition is not an EER of any set of trials. That is why no config of
+    the project instantiates this class: the trainer and the inferencer keep
+    the scores themselves and compute the partition EER once, logging it as
+    "{part}_EER". What is left here is a reusable running EER for code that
+    scores a full partition outside the tracker.
 
     Score convention (must match the official grading script): a higher score
     means "more likely bonafide", bonafide is label == 1, spoof is label == 0.

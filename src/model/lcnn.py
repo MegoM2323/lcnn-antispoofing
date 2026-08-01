@@ -1,3 +1,8 @@
+"""
+Light CNN countermeasure: nine convolutional blocks with Max-Feature-Map
+activations and a fully connected head over the whole feature map.
+"""
+
 import torch
 from torch import nn
 

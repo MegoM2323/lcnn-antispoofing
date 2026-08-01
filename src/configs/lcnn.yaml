@@ -1,7 +1,7 @@
 defaults:
   - model: lcnn
   - writer: cometml
-  - metrics: eer
+  - metrics: accuracy
   - datasets: asvspoof
   - dataloader: asvspoof
   - transforms: stft

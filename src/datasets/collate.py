@@ -1,9 +1,22 @@
+"""
+Assembly of dataset items into a batch: every waveform of the batch is brought
+to the same number of samples, the remaining fields are stacked as they are.
+"""
+
 from collections.abc import Callable
 from functools import partial
 
 import torch
 
-DEFAULT_MAX_LEN = 64600
+# what the configs of the project set 'collate_max_len' to: 77870 samples,
+# 4.87 s at 16 kHz
+DEFAULT_MAX_LEN = 77870
+
+# the length the waveforms were padded to before 'collate_max_len' appeared in
+# the configs (64600 samples, 4.04 s at 16 kHz, the value of the ASVspoof
+# recipes). Nothing pads to it any more, it is only needed to reconstruct the
+# input of a checkpoint trained back then, see src/trainer/config_check.py
+LEGACY_MAX_LEN = 64600
 
 
 def pad_or_crop(audio: torch.Tensor, max_len: int) -> torch.Tensor:
@@ -41,7 +54,7 @@ def collate_fn(dataset_items: list[dict], max_len: int = DEFAULT_MAX_LEN) -> dic
         dataset_items (list[dict]): list of objects from
             dataset.__getitem__.
         max_len (int): number of samples in each waveform of the batch.
-            The default corresponds to about 4 seconds at 16 kHz.
+            The default is DEFAULT_MAX_LEN, 4.87 seconds at 16 kHz.
     Returns:
         result_batch (dict[Tensor]): dict, containing batch-version
             of the tensors.

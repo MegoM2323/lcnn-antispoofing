@@ -1,6 +1,6 @@
 defaults:
   - model: lcnn
-  - metrics: eer
+  - metrics: accuracy
   - datasets: asvspoof_eval # we do not want to run inference on training data
   - dataloader: asvspoof
   - transforms: stft

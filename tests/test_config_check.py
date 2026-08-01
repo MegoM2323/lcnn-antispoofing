@@ -7,13 +7,13 @@ Requirements covered:
   accepted silently and quietly corrupts the scores. Every such difference
   must be reported;
 * checkpoints written before 'collate_max_len' existed have to be compared
-  against the default that 'collate_fn' used back then;
+  against the length that 'collate_fn' padded to back then;
 * a matching config produces no false alarm.
 """
 
 from omegaconf import OmegaConf
 
-from src.datasets.collate import DEFAULT_MAX_LEN
+from src.datasets.collate import LEGACY_MAX_LEN
 from src.trainer.config_check import (
     config_mismatches,
     format_mismatch_note,
@@ -69,10 +69,10 @@ def test_different_collate_max_len_is_reported():
 def test_absent_collate_max_len_falls_back_to_the_collate_default():
     saved = make_config(collate_max_len=None)
 
-    assert config_mismatches(saved, make_config(DEFAULT_MAX_LEN)) == []
+    assert config_mismatches(saved, make_config(LEGACY_MAX_LEN)) == []
 
     mismatches = config_mismatches(saved, make_config(77870))
-    assert str(DEFAULT_MAX_LEN) in mismatches[0]
+    assert str(LEGACY_MAX_LEN) in mismatches[0]
     assert "absent" in mismatches[0]
 
 

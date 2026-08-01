@@ -20,7 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 PROJECT_ROOT = Path(__file__).absolute().resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-from src.datasets.collate import DEFAULT_MAX_LEN  # noqa: E402
+from src.datasets.collate import LEGACY_MAX_LEN  # noqa: E402
 from src.trainer.config_check import (  # noqa: E402
     config_mismatches,
     format_mismatch_note,
@@ -139,7 +139,8 @@ def build_run_config(
     Returns:
         config (DictConfig): config accepted by get_dataloaders and Inferencer.
     """
-    collate_max_len = int(saved_config.get("collate_max_len", DEFAULT_MAX_LEN))
+    # a config without the key comes from a run older than the key itself
+    collate_max_len = int(saved_config.get("collate_max_len", LEGACY_MAX_LEN))
     transforms = saved_config.get("transforms", {})
     batch_transforms = transforms.get("batch_transforms", {})
     instance_transforms = transforms.get("instance_transforms", {})
