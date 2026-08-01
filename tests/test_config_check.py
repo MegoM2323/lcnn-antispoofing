@@ -14,7 +14,11 @@ Requirements covered:
 from omegaconf import OmegaConf
 
 from src.datasets.collate import DEFAULT_MAX_LEN
-from src.trainer.config_check import config_mismatches, format_mismatch_warning
+from src.trainer.config_check import (
+    config_mismatches,
+    format_mismatch_note,
+    format_mismatch_warning,
+)
 
 
 def make_config(collate_max_len=77870, n_frames=600, crop="first", in_freq=863):
@@ -114,3 +118,16 @@ def test_warning_lists_every_difference():
     assert "/tmp/model_best.pth" in text
     for mismatch in mismatches:
         assert mismatch in text
+
+
+def test_note_lists_every_difference_without_raising_an_alarm():
+    mismatches = config_mismatches(make_config(64600, n_frames=400), make_config())
+
+    text = format_mismatch_note(mismatches, "/tmp/model_best.pth")
+
+    assert "/tmp/model_best.pth" in text
+    for mismatch in mismatches:
+        assert mismatch in text
+    # the tools using it score with the checkpoint config, nothing is wrong
+    assert "MISMATCH" not in text
+    assert "submission" not in text

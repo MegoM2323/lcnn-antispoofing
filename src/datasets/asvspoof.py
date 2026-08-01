@@ -9,6 +9,7 @@ import soundfile as sf
 import torch
 
 from src.datasets.base_dataset import BaseDataset
+from src.datasets.collate import DEFAULT_MAX_LEN
 from src.utils.io_utils import ROOT_PATH, read_json, write_json
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class ASVspoofDataset(BaseDataset):
         self,
         part: str,
         data_dir: str,
-        max_len: int | None = 64600,
+        max_len: int | None = DEFAULT_MAX_LEN,
         random_crop: bool | None = None,
         index_dir: str | None = None,
         *args,
